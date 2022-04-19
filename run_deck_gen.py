@@ -3,8 +3,8 @@ from argparse import ArgumentParser
 
 from tqdm import tqdm
 
-from deck import Deck, DEFAULT_STAMP_IMAGE
 import image_processing as ip
+from deck import Deck, DEFAULT_STAMP_IMAGE
 from save_processing import SaveProcessor
 
 

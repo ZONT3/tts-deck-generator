@@ -1,13 +1,11 @@
 import io
-import math
 import random
-from typing import Tuple, Callable, Any, Union
+from typing import Tuple, Union
 
 import PIL.Image
 import requests
 from PIL import Image, ImageDraw
 from PIL.Image import Image as PILImage
-from PIL.ImageDraw import ImageDraw as PILImageDraw
 
 
 def download_img(img_url) -> PIL.Image.Image:

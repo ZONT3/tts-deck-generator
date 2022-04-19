@@ -1,7 +1,6 @@
 import json
 import os.path
 import random
-import re
 import shutil
 
 from deck import Deck

@@ -1,6 +1,6 @@
 import math
 import os
-from typing import List, Union, Any, Tuple, Optional
+from typing import List, Union, Tuple, Optional
 
 from PIL import Image as Image
 from PIL.Image import Image as PILImage
