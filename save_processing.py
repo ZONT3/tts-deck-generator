@@ -130,7 +130,8 @@ class SaveProcessor:
         deck_ids = []
         contained_objects = []
 
-        if self.verbose: print('Generating data...')
+        if self.verbose:
+            print('Generating data...')
 
         for deck_idx, deck in enumerate(decks):
             if deck.saved_sheets is None:
@@ -171,7 +172,8 @@ class SaveProcessor:
         self.deck_obj['DeckIDs'] = deck_ids
         self.deck_obj['ContainedObjects'] = contained_objects
 
-        if self.verbose: print('Backing up save...')
+        if self.verbose:
+            print('Backing up save...')
         filedir, filename = os.path.split(self.save_path)
         first_bak_path = os.path.join(filedir, filename + '.ttsdg.bak')
         if not os.path.exists(first_bak_path):
@@ -180,7 +182,8 @@ class SaveProcessor:
             shutil.copy(self.save_path, os.path.join(filedir, filename + '.bak'))
         os.remove(self.save_path)
 
-        if self.verbose: print('Writing save...')
+        if self.verbose:
+            print('Writing save...')
         with open(self.save_path, 'w') as fout:
             json.dump(self.save_obj, fout, indent=4)
 
@@ -204,6 +207,7 @@ class SaveProcessor:
                     idx = int(k)
                     if self.custom_decks_start < idx:
                         self.custom_decks_start = idx
+
         self._foreach_object(func)
         if self.verbose:
             print('Custom decks start:', self.custom_decks_start)
