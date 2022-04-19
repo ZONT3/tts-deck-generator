@@ -1,4 +1,5 @@
 import math
+import os
 from typing import List, Union, Any, Tuple
 
 from PIL import Image as Image
@@ -39,6 +40,15 @@ class Deck:
         for w, h, c in self.sheets_sizes:
             res.append(f'({w}x{h}): {c}')
         return ', '.join(res)
+
+    def save(self, output_dir, prefix):
+        for i, s in enumerate(self.sheets):
+            s.save(os.path.join(output_dir, f'{prefix}_sheet_{i:02d}.png'))
+        if self.back_sheets is not None:
+            for i, s in enumerate(self.back_sheets):
+                s.save(os.path.join(output_dir, f'{prefix}_back_{i:02d}.png'))
+        else:
+            self.back_img.save(os.path.join(output_dir, f'{prefix}_back.png'))
 
     @classmethod
     def create(cls, images: List[PILImage], back_img=None, back_images=None, insert_hide=True, hide_img=None,
