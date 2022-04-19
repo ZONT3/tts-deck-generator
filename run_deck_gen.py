@@ -69,5 +69,5 @@ if __name__ == '__main__':
             p.write_decks(grid)
 
             if args.guid_clean:
-                p = SaveProcessor(args.game_save, args.guid_clean)
+                p.set_object(args.guid_clean)
                 p.write_decks(clean)
