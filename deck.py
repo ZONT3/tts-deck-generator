@@ -1,6 +1,6 @@
 import math
 import os
-from typing import List, Union, Any, Tuple
+from typing import List, Union, Any, Tuple, Optional
 
 from PIL import Image as Image
 from PIL.Image import Image as PILImage
@@ -16,24 +16,48 @@ DEFAULT_STAMP_IMAGE = 'https://imgur.com/j9789mk.png'
 MARGIN = 0
 
 
+class DeckSheet:
+    face_path: str
+    back_path: str
+    size: Tuple[int, int, int]
+    back_is_hidden: bool
+    unique_back: bool
+
+    def __init__(self, face_path: str,
+                 back_path: str,
+                 size: Tuple[int, int, int],
+                 back_is_hidden: bool,
+                 unique_back: bool):
+        self.face_path = face_path
+        self.back_path = back_path
+        self.size = size
+        self.back_is_hidden = back_is_hidden
+        self.unique_back = unique_back
+
+
 class Deck:
+    saved_sheets: Optional[List[DeckSheet]]
     sheets_sizes: List[Tuple[int, int, int]]
     sheets: List[PILImage]
     back_img: Union[PILImage, List[PILImage]]
     has_hide_img: bool
-    back_sheets: Union[List[PILImage], Any]
+    back_sheets: Optional[List[PILImage]]
+    cards_info: List[dict]
 
     def __init__(self,
                  sheets: List[PILImage],
                  back_img: Union[PILImage],
-                 back_sheets: Union[List[PILImage], Any],
+                 back_sheets: Optional[List[PILImage]],
                  has_hide_img: bool,
-                 sheets_sizes: List[Tuple[int, int, int]]):
+                 sheets_sizes: List[Tuple[int, int, int]],
+                 cards_info: List[dict]):
         self.sheets = sheets
         self.back_img = back_img
         self.back_sheets = back_sheets
         self.has_hide_img = has_hide_img
         self.sheets_sizes = sheets_sizes
+        self.cards_info = cards_info
+        self.saved_sheets = None
 
     def sheets_info(self):
         res = []
@@ -42,17 +66,37 @@ class Deck:
         return ', '.join(res)
 
     def save(self, output_dir, prefix):
+        faces = []
         for i, s in enumerate(self.sheets):
-            s.save(os.path.join(output_dir, f'{prefix}_sheet_{i:02d}.png'))
+            path = os.path.join(output_dir, f'{prefix}_sheet_{i:02d}.png')
+            s.save(path)
+            faces.append(path)
+
         if self.back_sheets is not None:
+            backs = list()
             for i, s in enumerate(self.back_sheets):
-                s.save(os.path.join(output_dir, f'{prefix}_back_{i:02d}.png'))
+                path = os.path.join(output_dir, f'{prefix}_back_{i:02d}.png')
+                s.save(path)
+                backs.append(path)
+
         else:
-            self.back_img.save(os.path.join(output_dir, f'{prefix}_back.png'))
+            path = os.path.join(output_dir, f'{prefix}_back.png')
+            self.back_img.save(path)
+            backs = [path for _ in range(len(faces))]
+
+        self.saved_sheets = []
+        for f, b, s in zip(faces, backs, self.sheets_sizes):
+            self.saved_sheets.append(DeckSheet(f, b, s, not self.has_hide_img, True))
 
     @classmethod
-    def create(cls, images: List[PILImage], back_img=None, back_images=None, insert_hide=True, hide_img=None,
-               sheet_width=MAX_SHEET_WIDTH, sheet_height=MAX_SHEET_HEIGHT, maxw=720, enable_tqdm=True):
+    def create(cls, images: List[PILImage], info: Optional[List[dict]] = None, back_img=None, back_images=None,
+               insert_hide=True, hide_img=None,
+               sheet_width=MAX_SHEET_WIDTH, sheet_height=MAX_SHEET_HEIGHT, maxw=720, enable_tqdm=True, tqdm_inst=tqdm):
+        if info is None:
+            info = [{} for _ in range(len(images))]
+        else:
+            if len(info) != len(images):
+                raise ValueError('Info list length mismatch')
 
         if insert_hide and hide_img is None:
             hide_img = ip.download_img(DEFAULT_HIDE_IMAGE)
@@ -64,20 +108,21 @@ class Deck:
                 raise ValueError(f'Back images are represented as sheet, but found size mismatch with faces sheet '
                                  f'({len(images)} vs. {len(back_images)})')
             back_images, _ = cls.generate_sheets(back_images, sheet_width, sheet_height, back_img, maxw,
-                                                'backs' if enable_tqdm else None)
+                                                 'backs' if enable_tqdm else None, tqdm_inst=tqdm_inst)
 
-        sheets, info = cls.generate_sheets(images, sheet_width, sheet_height, hide_img, maxw,
-                                           'faces' if enable_tqdm else None)
+        sheets, sizes = cls.generate_sheets(images, sheet_width, sheet_height, hide_img, maxw,
+                                            'faces' if enable_tqdm else None, tqdm_inst=tqdm_inst)
 
-        return Deck(sheets, back_img, back_images, insert_hide, info)
+        return Deck(sheets, back_img, back_images, insert_hide, sizes, info)
 
     @classmethod
-    def generate_sheets(cls, images, sheet_width, sheet_height, hide_img=None, maxw=720, tqdm_desc=None):
+    def generate_sheets(cls, images, sheet_width, sheet_height,
+                        hide_img=None, maxw=720, tqdm_desc=None, tqdm_inst=tqdm):
         sheet_width = min(sheet_width, MAX_SHEET_WIDTH)
         sheet_height = min(sheet_height, MAX_SHEET_HEIGHT)
 
         ratio = None
-        max_size: Union[Tuple[int, int], Any] = None
+        max_size: Optional[Tuple[int, int]] = None
         max_res = 0
 
         if tqdm_desc is not None:
@@ -116,16 +161,16 @@ class Deck:
 
         x, y = 0, 0
         sheets = list()
-        info = list()
+        sizes = list()
 
-        images_gen = images if tqdm_desc is None else tqdm(images, unit='pic', desc=f'Generating {tqdm_desc}')
+        images_gen = images if tqdm_desc is None else tqdm_inst(images, total=len(images), unit='pic', desc=f'Generating {tqdm_desc}')
         for i, im in enumerate(images_gen):
             if x >= sheet_width:
                 x = 0
                 y += 1
             if y >= sheet_height or len(sheets) == 0:
                 if len(sheets) > 0:
-                    info.append((
+                    sizes.append((
                         sheet_width, sheet_height,
                         sheet_height * sheet_width))
 
@@ -138,8 +183,8 @@ class Deck:
         if hide_img is not None:
             insert(sheets[-1], hide_img, sheet_width - 1, y if x < sheet_width else (y + 1))
 
-        info.append((sheet_width if y > 0 else x, y + 1, y * sheet_width + x))
-        return sheets, info
+        sizes.append((sheet_width if y > 0 else x, y + 1, y * sheet_width + x))
+        return sheets, sizes
 
     @staticmethod
     def _create_sheet(leftover, width, max_height, card_size, background_color=(255, 255, 255, 255)):
