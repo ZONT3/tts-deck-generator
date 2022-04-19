@@ -22,7 +22,7 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
     listdir = os.listdir(pics_dir)
     for f in tqdm_inst(listdir, total=len(listdir), unit='pic', desc='Preparing pictures'):
         if f.lower().split('.')[-1] in ['jpg', 'jpeg', 'png']:
-            info.append({'Nickname': f})
+            info.append({'Nickname': '.'.join(f.split('.')[0:-1])})
             f = os.path.join(pics_dir, f)
 
             pics_face.append(ip.round_frame(f))
@@ -34,7 +34,7 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
     print('DECK: grid')
     grid_deck = Deck.create(pics_face, back_images=pics_back, info=info, tqdm_inst=tqdm_inst)
     print('DECK: clean')
-    clean_deck = Deck.create(pics_fixed, tqdm_inst=tqdm_inst)
+    clean_deck = Deck.create(pics_fixed, tqdm_inst=tqdm_inst, info=info)
 
     print('Saving...')
     os.makedirs(output_dir, exist_ok=True)
