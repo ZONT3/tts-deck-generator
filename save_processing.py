@@ -56,7 +56,7 @@ _reference_fallback_custom_deck = """{
 }"""
 
 
-def _to_file_path(path):
+def to_file_path(path):
     path = os.path.abspath(path)
     if path.startswith('/'):
         path = path[1:]
@@ -144,8 +144,8 @@ class SaveProcessor:
                 sheet_idx = len(custom_decks) + 1 + self.custom_decks_start
 
                 custom_deck = json.loads(self.reference_custom_deck)
-                custom_deck['FaceURL'] = _to_file_path(sheet.face_path)
-                custom_deck['BackURL'] = _to_file_path(sheet.back_path)
+                custom_deck['FaceURL'] = to_file_path(sheet.face_path)
+                custom_deck['BackURL'] = to_file_path(sheet.back_path)
                 custom_deck['NumWidth'] = sheet.size[0]
                 custom_deck['NumHeight'] = sheet.size[1]
                 custom_deck['BackIsHidden'] = sheet.back_is_hidden

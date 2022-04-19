@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 from tqdm import tqdm
 
 import image_processing as ip
+import save_processing
 from deck import Deck, DEFAULT_STAMP_IMAGE
 from save_processing import SaveProcessor
 
@@ -44,6 +45,47 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
     return grid_deck, clean_deck
 
 
+def insert_urls(game_save, output, show=True):
+    if show:
+        from PIL import Image
+
+    with open(game_save, 'r') as sav:
+        sav = sav.read()
+    buf = sav
+
+    print('Enter URLs for prompted local files replacements.')
+    print('URLs must be urlencoded already!')
+    print('Type "abort" or "a" to abort')
+    for f in os.listdir(output):
+        if f.lower().split('.')[-1] not in ['png', 'jpg', 'jpeg']:
+            print(f'Found not an image file ({f}), skipping...')
+            continue
+        fn = os.path.join(output, f)
+
+        if show:
+            img = Image.open(fn)
+            img.show()
+
+        print(f'Replacement for {f}')
+        replacement = input('> ')
+
+        if replacement in ['a', 'abort']:
+            return
+
+        fn = save_processing.to_file_path(fn).replace('\\', '\\\\')
+        out = buf.replace(fn, replacement)
+        if hash(out) != hash(buf):
+            print('Success')
+        else:
+            print('Not found any occurrences of', fn)
+        buf = out
+
+    if hash(buf) != hash(sav):
+        with open(game_save, 'w') as fout:
+            fout.write(buf)
+        print('Wrote modified file')
+
+
 if __name__ == '__main__':
     p = ArgumentParser()
     p.add_argument('-d', '--pics-dir', type=str, default=None, help='Directory to grab pictures from')
@@ -52,15 +94,21 @@ if __name__ == '__main__':
     p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
     p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save')
     p.add_argument('-G', '--guid-clean', type=str, default=None, help='Target second (clean) deck')
+    p.add_argument('-u', '--insert-url', action='store_true', help='Enter interactive mode for changing files local '
+                                                                   'dirs to URLs. Output dir will be used to iterate'
+                                                                   'over files.'
+                                                                   '--game-save must be set')
+    p.add_argument('-i', '--show-img', action='store_true', help='Show images for --insert-url interaction. '
+                                                                 'Uses PIL.Image.Image.show()')
     args = p.parse_args()
+
+    if args.game_save:
+        if not os.path.isfile(args.game_save):
+            raise AssertionError('--game-save does not represent a file')
 
     if args.pics_dir:
         if not os.path.isdir(args.pics_dir):
             raise AssertionError('--pics-dir does not represent a dir')
-
-        if args.game_save:
-            if not os.path.isfile(args.game_save):
-                raise AssertionError('--game-save does not represent a file')
 
         grid, clean = generate_deck(args.pics_dir, args.output, args.no_rejected)
 
@@ -71,3 +119,6 @@ if __name__ == '__main__':
             if args.guid_clean:
                 p.set_object(args.guid_clean)
                 p.write_decks(clean)
+
+    if args.insert_url and args.game_save:
+        insert_urls(args.game_save, args.output, args.show_img)
