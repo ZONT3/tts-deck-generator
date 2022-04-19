@@ -86,7 +86,7 @@ class Deck:
 
         self.saved_sheets = []
         for f, b, s in zip(faces, backs, self.sheets_sizes):
-            self.saved_sheets.append(DeckSheet(f, b, s, not self.has_hide_img, True))
+            self.saved_sheets.append(DeckSheet(f, b, s, not self.has_hide_img, self.back_sheets is not None))
 
     @classmethod
     def create(cls, images: List[PILImage], info: Optional[List[dict]] = None, back_img=None, back_images=None,
