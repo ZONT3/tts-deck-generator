@@ -21,6 +21,7 @@ PLAYER_ZONES_MAPPING_ID2K = {
     'Orange', 'Yellow', 'Green', 
     'Teal', 'Blue', 'Purple', 'Pink'
 }
+ROTATED_PLAYERS = {2,3,4,7,8,9}
 
 DEFAULT_CONFIG = {
     shuffle_players_grid = false,
@@ -126,6 +127,12 @@ function GW_GAME:InitGame(config)
         PLAYER_ZONES_MAPPING_K2ID[v] = k
     end
 
+    local tmp = {}
+    for _, v in ipairs(ROTATED_PLAYERS) do
+        tmp[v] = true
+    end
+    ROTATED_PLAYERS = tmp
+
     if not config then config = {} end
     for k, v in pairs(DEFAULT_CONFIG) do
         if not config[k] then
@@ -152,21 +159,40 @@ function GW_GAME:InitPlayer(player, card_name)
     data.displayed = {}
     data.page = {}
 
-    local zone = self.data.player_zones[PLAYER_ZONES_MAPPING_K2ID[player]]
+    local pl_id = PLAYER_ZONES_MAPPING_K2ID[player]
+    local rotate = ROTATED_PLAYERS[pl_id]
+    local card_w = not rotate and CARD_W or CARD_H
+    local card_h = not rotate and CARD_H or CARD_W
+
+    local zone = self.data.player_zones[pl_id]
     local zw = zone.br.x - zone.tl.x
     local zh = zone.tl.z - zone.br.z
-    local w = zw / (CARD_W + math.max(CARD_MIN_MARGIN, - CARD_W * 0.8))
-    local h = zh / CARD_H
-    data.grid = self:GenerateGridPoints(zone.tl, zone.br, math.floor(w), math.floor(h))
+    local w = math.floor(zw / (card_w + math.max(CARD_MIN_MARGIN, - CARD_W * 0.8)))
+    local h = math.floor(zh / card_h)
+    data.grid = self:GenerateGridPoints(zone.tl, zone.br, w, h)
 
     self.data.players[player] = data
 end
 
 function GW_GAME:StartGame()
     self.data.stage = STAGE_PLAY
-    for p, name in pairs(self.data.prepared_players) do
-        self:InitPlayer(p, name)
-        self:SetPage(p, 1)
+    -- for p, name in pairs(self.data.prepared_players) do
+    --     self:InitPlayer(p, name)
+    --     self:SetPage(p, 1)
+    -- end
+    -- TEMP JUMPER
+    local cards = self:GetGridCardList()
+    for _, p in ipairs(Player.getPlayers()) do
+        local card = cards[math.random(#cards)]
+        self:InitPlayer(p.color, card.name)
+        self:SetPage(p.color, 1)
+        for _, pp in ipairs(Player.getPlayers()) do
+            if p.color ~= pp.color then
+                local obj = self:DuplicateCard(card)
+                obj.setName('['..Color.fromString(p.color):toHex(false)..']'..card.name)
+                obj.deal(1, pp.color)
+            end
+        end
     end
 end
 
@@ -177,7 +203,7 @@ function GW_GAME:InitDecks()
     }) do
         local field = name .. '_deck'
         if not self[field] then
-            local deck = nil
+            local deck
             for _, obj in ipairs(getObjectFromGUID(guid).getObjects()) do
                 if obj.type == 'Deck' or obj.type == 'DeckCustom' then
                     deck = obj
@@ -414,31 +440,34 @@ function GW_GAME:SetPage(ply, idx)
                 break
             end
 
-            local pos = data.grid[i - start + 1]
-            pos = {pos.x, self.data.game_height, pos.z}
+            local diff = i - start
+            local pos = data.grid[diff + 1]
+            pos = {
+                pos.x,
+                self.data.game_height + (CARD_MIN_MARGIN <= 0 and diff * CARD_OVERLAP_STEP or 0),
+                pos.z
+            }
             local card_name = ordered[i]
             local card = self:FindCard(card_name, list)
             local flipped = data.card_states[card_name]
             local r = {rotation.x, rotation.y, flipped and 180 or 0}
 
-            local obj_data = card:GetData()
-            obj_data.GUID = nil
-            obj_data.Transform = nil
-
-            local obj = spawnObjectData({
-                position = pos,
-                rotation = r,
-                data = obj_data,
-                callback_function = function (obj)
-                    obj.addTag(self:PlyTag(ply, 'gridZone'))
-                    obj.setLock(false)
-                end
-            })
-            data.displayed[obj.guid] = {pos=pos, r=r}
+            local obj = self:DuplicateCard(card, pos, r)
+            obj.setLock(false)
+            obj.addTag(self:PlyTag(ply, 'gridZone'))
+            data.displayed[obj.getGUID()] = {pos = pos, r = r}
         end
     end
 
     data.page = idx
+end
+
+function GW_GAME:DuplicateCard(card, pos, r)
+    return spawnObjectData({
+        position = pos or POS_OPERATING_TABLE,
+        rotation = r or {0, 0, 0},
+        data = card:GetData(),
+    })
 end
 
 function GW_GAME:OnCardLeft(obj)
@@ -508,9 +537,9 @@ function GW_GAME:GenerateGridPoints(p_tl, p_br, w, h)
     for _, p in ipairs(self:GenerateGridZones(p_tl, p_br, w, h)) do
         local left = p.tl.x < p.br.x and p.tl.x or p.br.x
         local right = p.tl.x < p.br.x and p.br.x or p.tl.x
-        local top = p.tl.z < p.br.z and p.tl.z or p.br.z
-        local bot = p.tl.z < p.br.z and p.br.z or p.tl.z
-        res[#res + 1] = Vec2f(left + (right - left) / 2, top + (top - bot) / 2)
+        local top = p.tl.z > p.br.z and p.tl.z or p.br.z
+        local bot = p.tl.z > p.br.z and p.br.z or p.tl.z
+        res[#res + 1] = Vec2f(left + (right - left) / 2, bot + (top - bot) / 2)
     end
     return res
 end
