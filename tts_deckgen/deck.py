@@ -6,7 +6,7 @@ from PIL import Image as Image
 from PIL.Image import Image as PILImage
 from tqdm import tqdm
 
-import image_processing as ip
+from . import image_processing as ip
 
 MAX_SHEET_WIDTH = 10
 MAX_SHEET_HEIGHT = 7
@@ -46,7 +46,7 @@ class Deck:
 
     def __init__(self,
                  sheets: List[PILImage],
-                 back_img: Union[PILImage],
+                 back_img: Union[PILImage, List[PILImage]],
                  back_sheets: Optional[List[PILImage]],
                  has_hide_img: bool,
                  sheets_sizes: List[Tuple[int, int, int]],

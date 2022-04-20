@@ -3,10 +3,10 @@ from argparse import ArgumentParser
 
 from tqdm import tqdm
 
-import image_processing as ip
-import save_processing
-from deck import Deck, DEFAULT_STAMP_IMAGE
-from save_processing import SaveProcessor
+from . import image_processing as ip
+from . import save_processing as sp
+from .deck import Deck, DEFAULT_STAMP_IMAGE
+from .save_processing import SaveProcessor
 
 
 def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
@@ -72,7 +72,7 @@ def insert_urls(game_save, output, show=True):
         if replacement in ['a', 'abort']:
             return
 
-        fn = save_processing.to_file_path(fn).replace('\\', '\\\\')
+        fn = sp.to_file_path(fn).replace('\\', '\\\\')
         out = buf.replace(fn, replacement)
         if hash(out) != hash(buf):
             print('Success')
