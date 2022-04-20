@@ -4,6 +4,11 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/input" />
       <excludeFolder url="file://$MODULE_DIR$/output" />
+      <excludeFolder url="file://$MODULE_DIR$/.ipynb_checkpoints" />
+      <excludeFolder url="file://$MODULE_DIR$/input-1" />
+      <excludeFolder url="file://$MODULE_DIR$/input-2" />
+      <excludeFolder url="file://$MODULE_DIR$/output-1" />
+      <excludeFolder url="file://$MODULE_DIR$/output-2" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
