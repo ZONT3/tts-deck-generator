@@ -3,10 +3,10 @@ from argparse import ArgumentParser
 
 from tqdm import tqdm
 
-from . import image_processing as ip
-from . import save_processing as sp
-from .deck import Deck, DEFAULT_STAMP_IMAGE
-from .save_processing import SaveProcessor
+import image_processing as ip
+import save_processing as sp
+from deck import Deck, DEFAULT_STAMP_IMAGE
+from save_processing import SaveProcessor
 
 
 def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):

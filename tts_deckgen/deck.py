@@ -6,7 +6,7 @@ from PIL import Image as Image
 from PIL.Image import Image as PILImage
 from tqdm import tqdm
 
-from . import image_processing as ip
+import image_processing as ip
 
 MAX_SHEET_WIDTH = 10
 MAX_SHEET_HEIGHT = 7
