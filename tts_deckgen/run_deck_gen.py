@@ -1,4 +1,5 @@
 import os.path
+import re
 from argparse import ArgumentParser
 
 from tqdm import tqdm
@@ -22,7 +23,10 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
     listdir = os.listdir(pics_dir)
     for f in tqdm_inst(listdir, total=len(listdir), unit='pic', desc='Preparing pictures'):
         if f.lower().split('.')[-1] in ['jpg', 'jpeg', 'png']:
-            info.append({'Nickname': '.'.join(f.split('.')[0:-1])})
+            name = '.'.join(f.split('.')[0:-1])
+            name = re.sub(r'\s*\[\d+]$', '', name)
+            name = re.sub(r'^\[\d+]\s*', '', name)
+            info.append({'Nickname': name})
             f = os.path.join(pics_dir, f)
 
             pics_face.append(ip.round_frame(f))
