@@ -37,6 +37,7 @@ class SaveProcessor:
         self.save_obj = save_obj
         self.save_path = save_path
 
+        self.save_props = { }
         self.referenced = False
         self.reference_custom_deck = None
         self.reference_contained_object = None
@@ -86,6 +87,7 @@ class SaveProcessor:
             self.deck_obj = deck_obj
             self.referenced = True
         else:
+            self.save_props = {'Transform': deck_obj['Transform']}
             self.deck_obj = json.loads(data.deck_custom)
 
     def write_decks(self, *decks: Union[Deck, Tuple[List[DeckSheet], List[dict]]]):
@@ -136,6 +138,7 @@ class SaveProcessor:
         if not self.referenced:
             for i, o in enumerate(self.save_obj['ObjectStates']):
                 if o['GUID'] == self.obj_guid:
+                    self.deck_obj.update(self.save_props)
                     self.save_obj['ObjectStates'][i] = self.deck_obj
                     break
 

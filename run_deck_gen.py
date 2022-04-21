@@ -1,5 +1,7 @@
+import datetime
 import os.path
 import re
+import shutil
 from argparse import ArgumentParser
 
 from tqdm import tqdm
@@ -97,30 +99,61 @@ def load(deck_dir, prefix):
     return DeckSheet.load(deck_dir, prefix), load_cards_info(deck_dir, prefix)
 
 
-if __name__ == '__main__':
+def main():
     p = ArgumentParser()
     p.add_argument('-d', '--pics-dir', type=str, default=None, help='Directory to grab pictures from')
     p.add_argument('-D', '--deck-dir', type=str, default=None, help='Directory to load deck from. '
                                                                     'Must be output dir of run '
                                                                     'with -d option')
-    p.add_argument('-p', '--prefix', type=str, default='grid', help='Deck prefix for -D option. Can be "grid" or '
-                                                                    '"clean", or any custom')
-    p.add_argument('-R', '--no-rejected', action='store_true', help='Do not generate "Rejected" as back')
-    p.add_argument('-o', '--output', type=str, default='output', help='Output dir')
-    p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
-    p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save')
-    p.add_argument('-G', '--guid-clean', type=str, default=None, help='Target second (clean) deck')
     p.add_argument('-u', '--insert-url', action='store_true', help='Enter interactive mode for changing files local '
                                                                    'dirs to URLs. Output dir will be used to iterate'
                                                                    'over files.'
                                                                    '--game-save must be set')
+    p.add_argument('--fix', action='store_true', help='Restores save (-s option) to untouched state')
+
+    p.add_argument('-o', '--output', type=str, default='output', help='Output dir')
+    p.add_argument('-R', '--no-rejected', action='store_true', help='Do not generate "Rejected" as back')
+
+    p.add_argument('-p', '--prefix', type=str, default='grid', help='Deck prefix for -D option. Can be "grid" or '
+                                                                    '"clean", or any custom')
+
+    p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
+    p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save')
+    p.add_argument('-G', '--guid-clean', type=str, default=None, help='Target second (clean) deck')
+
     p.add_argument('-i', '--show-img', action='store_true', help='Show images for --insert-url interaction. '
                                                                  'Uses PIL.Image.Image.show()')
+
     args = p.parse_args()
 
     if args.game_save:
         if not os.path.isfile(args.game_save):
             raise AssertionError('--game-save does not represent a file')
+
+    if args.fix:
+        if not args.game_save:
+            raise AssertionError('--game-save not set')
+
+        bak = args.game_save + '.ttsdg.bak'
+        if os.path.isfile(bak):
+            print(f'Found untouched save, last modified: {datetime.datetime.fromtimestamp(os.path.getmtime(bak))}')
+
+        else:
+            bak = args.game_save + '.bak'
+            if os.path.isfile(bak):
+                print(f'Not found save in untouched state, but found backup, last modified: '
+                      f'{datetime.datetime.fromtimestamp(os.path.getmtime(bak))}')
+                ans = input('Would you like to use it? (y/other): ')
+                if not ans.startswith('y'):
+                    return
+
+            else:
+                print('Not found any backup')
+                return
+
+        os.remove(args.game_save)
+        shutil.copy(bak, args.game_save)
+        return
 
     if args.deck_dir:
         if not os.path.isdir(args.deck_dir):
@@ -135,7 +168,7 @@ if __name__ == '__main__':
         p.set_object(args.guid)
         p.write_decks(deck)
 
-    if args.pics_dir:
+    elif args.pics_dir:
         if not os.path.isdir(args.pics_dir):
             raise AssertionError('--pics-dir does not represent a dir')
 
@@ -154,3 +187,7 @@ if __name__ == '__main__':
 
     if args.insert_url and args.game_save:
         insert_urls(args.game_save, args.output, args.show_img)
+
+
+if __name__ == '__main__':
+    main()
