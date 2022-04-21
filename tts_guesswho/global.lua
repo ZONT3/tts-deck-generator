@@ -156,6 +156,8 @@ STAGE_PLAY = 2
 
 GW_GAME = {}
 GW_GAME.data = {}
+GW_GAME.grid_locked = {}
+GW_GAME.objects = {}
 
 function GW_GAME:InitGame(config)
     print(' ==== GW Game Init ==== ')
@@ -164,11 +166,9 @@ function GW_GAME:InitGame(config)
     self.data.players = {}
     self.data.prepared_players = {}
 
-    if self.objects then
-        for _, v in pairs(self.objects) do
-            if v then
-                v.destroyObject()
-            end
+    for _, v in pairs(self.objects) do
+        if v then
+            v.destroyObject()
         end
     end
     self.objects = {}
@@ -531,6 +531,7 @@ function GW_GAME:GetPlyInst(ply)
 end
 
 function GW_GAME:SetPage(ply, idx)
+    if self.grid_locked[ply] then return end
     local data = self:PlayerData(ply)
 
     if idx == data.page then return end
@@ -550,6 +551,8 @@ function GW_GAME:SetPage(ply, idx)
         Wait.frames(fnc_clear)
 
     else
+        self.grid_locked[ply] = true
+
         local page_len = #data.grid
         local start = page_len * (idx - 1) + 1
         local stop = start + page_len - 1
@@ -583,6 +586,7 @@ function GW_GAME:SetPage(ply, idx)
                 data.displayed[obj.getGUID()] = {pos = pos, r = r}
             end
             data.page = idx
+            self.grid_locked[ply] = false
         end
 
         Wait.frames(function ()
