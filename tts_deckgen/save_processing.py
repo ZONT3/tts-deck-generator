@@ -2,58 +2,10 @@ import json
 import os.path
 import random
 import shutil
+from typing import Optional, List, Tuple, Union
 
-from .deck import Deck
-
-_reference_fallback_contained_object = """{
-  "GUID": "fc648e",
-  "Name": "Card",
-  "Transform": {
-    "posX": -2.56400275,
-    "posY": 1.55906236,
-    "posZ": -16.0311089,
-    "rotX": 0.01687331,
-    "rotY": 179.999969,
-    "rotZ": 180.07988,
-    "scaleX": 1.0,
-    "scaleY": 1.0,
-    "scaleZ": 1.0
-  },
-  "Nickname": "",
-  "Description": "",
-  "GMNotes": "",
-  "ColorDiffuse": {
-    "r": 0.713235259,
-    "g": 0.713235259,
-    "b": 0.713235259
-  },
-  "LayoutGroupSortIndex": 0,
-  "Value": 0,
-  "Locked": false,
-  "Grid": true,
-  "Snap": true,
-  "IgnoreFoW": false,
-  "MeasureMovement": false,
-  "DragSelectable": true,
-  "Autoraise": true,
-  "Sticky": true,
-  "Tooltip": true,
-  "GridProjection": false,
-  "Hands": true,
-  "CardID": 1704,
-  "SidewaysCard": false,
-  "XmlUI": "",
-  "ContainedObjects": []
-}"""
-_reference_fallback_custom_deck = """{
-  "FaceURL": "",
-  "BackURL": "",
-  "NumWidth": 10,
-  "NumHeight": 2,
-  "BackIsHidden": false,
-  "UniqueBack": true,
-  "Type": 0
-}"""
+from . import save_data as data
+from .deck import Deck, DeckSheet
 
 
 def to_file_path(path):
@@ -68,10 +20,10 @@ class SaveProcessor:
     save_obj: dict
     obj_guid: str
     save_path: str
-    reference_contained_object: str
-    reference_custom_deck: str
+    reference_contained_object: Optional[str]
+    reference_custom_deck: Optional[str]
 
-    def __init__(self, save_path, obj_guid, verbose=True):
+    def __init__(self, save_path, verbose=True):
         self.verbose = verbose
         if verbose:
             print('Reading save...')
@@ -85,7 +37,9 @@ class SaveProcessor:
         self.save_obj = save_obj
         self.save_path = save_path
 
-        self.set_object(obj_guid)
+        self.referenced = False
+        self.reference_custom_deck = None
+        self.reference_contained_object = None
 
         self.guids = set()
         self._collect_guids()
@@ -93,7 +47,7 @@ class SaveProcessor:
         self.custom_decks_start = 0
         self._find_custom_decks()
 
-    def set_object(self, obj_guid):
+    def set_object(self, obj_guid, use_stored_data=True, append_content=False):
         objects = self.save_obj['ObjectStates']
         for o in objects:
             if o['GUID'] == obj_guid:
@@ -103,29 +57,38 @@ class SaveProcessor:
             raise ValueError(f'Cannot find referenced deck in save '
                              f'(GUID: {obj_guid}, Objects in save: {len(objects)})')
 
-        try:
-            cd = deck_obj['CustomDeck']
-            for k in cd.keys():
-                self.reference_custom_deck = json.dumps(cd[k])
-                break
-        except KeyError:
-            print('WARN: Cannot find custom deck reference, falling to internal snapshot')
-            self.reference_custom_deck = _reference_fallback_custom_deck
+        if not use_stored_data:
+            try:
+                cd = deck_obj['CustomDeck']
+                for k in cd.keys():
+                    self.reference_custom_deck = json.dumps(cd[k])
+                    break
+            except KeyError:
+                print('WARN: Cannot find custom deck reference, falling to internal snapshot')
 
-        try:
-            self.reference_contained_object = json.dumps(deck_obj['ContainedObjects'][0])
-        except KeyError:
-            print('WARN: Cannot find contained object reference, falling to internal snapshot')
-            self.reference_contained_object = _reference_fallback_contained_object
+            try:
+                self.reference_contained_object = json.dumps(deck_obj['ContainedObjects'][0])
+            except KeyError:
+                print('WARN: Cannot find contained object reference, falling to internal snapshot')
+
+        if self.reference_custom_deck is None:
+            self.reference_custom_deck = data.custom_deck_entry
+        if self.reference_contained_object is None:
+            self.reference_contained_object = data.contained_object
 
         self.obj_guid = obj_guid
-        self.deck_obj = deck_obj
 
-        self.deck_obj['CustomDeck'] = {}
-        self.deck_obj['DeckIDs'] = []
-        self.deck_obj['ContainedObjects'] = []
+        if not use_stored_data or append_content:
+            if not append_content:
+                deck_obj['CustomDeck'] = {}
+                deck_obj['DeckIDs'] = []
+                deck_obj['ContainedObjects'] = []
+            self.deck_obj = deck_obj
+            self.referenced = True
+        else:
+            self.deck_obj = json.loads(data.deck_custom)
 
-    def write_decks(self, *decks: Deck):
+    def write_decks(self, *decks: Union[Deck, Tuple[List[DeckSheet], List[dict]]]):
         custom_decks = {}
         deck_ids = []
         contained_objects = []
@@ -134,13 +97,14 @@ class SaveProcessor:
             print('Generating data...')
 
         for deck_idx, deck in enumerate(decks):
-            if deck.saved_sheets is None:
+            saved_sheets, cards_info = deck if not isinstance(deck, Deck) else (deck.saved_sheets, deck.cards_info)
+            if saved_sheets is None:
                 print(f'WARN: Deck #{deck_idx} not saved!')
                 continue
 
             start = len(deck_ids)
 
-            for sheet in deck.saved_sheets:
+            for sheet in saved_sheets:
                 sheet_idx = len(custom_decks) + 1 + self.custom_decks_start
 
                 custom_deck = json.loads(self.reference_custom_deck)
@@ -154,7 +118,7 @@ class SaveProcessor:
 
                 deck_ids += [sheet_idx * 100 + i for i in range(sheet.size[2])]
 
-            for i, inf in enumerate(deck.cards_info):
+            for i, inf in enumerate(cards_info):
                 obj = json.loads(self.reference_contained_object)
                 for k, v in inf.items():
                     obj[k] = v
@@ -162,15 +126,18 @@ class SaveProcessor:
                 card_id = deck_ids[start + i]
                 obj['CardID'] = card_id
 
-                sheet_idx = str(card_id // 100)
-                obj['CustomDeck'] = {sheet_idx: custom_decks[sheet_idx]}
-
                 obj['GUID'] = self._generate_guid()
                 contained_objects.append(obj)
 
-        self.deck_obj['CustomDeck'] = custom_decks
-        self.deck_obj['DeckIDs'] = deck_ids
-        self.deck_obj['ContainedObjects'] = contained_objects
+        self.deck_obj['CustomDeck'].update(custom_decks)
+        self.deck_obj['DeckIDs'] += deck_ids
+        self.deck_obj['ContainedObjects'] += contained_objects
+
+        if not self.referenced:
+            for i, o in enumerate(self.save_obj['ObjectStates']):
+                if o['GUID'] == self.obj_guid:
+                    self.save_obj['ObjectStates'][i] = self.deck_obj
+                    break
 
         if self.verbose:
             print('Backing up save...')

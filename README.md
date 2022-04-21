@@ -4,14 +4,14 @@ Python tools for generating decks and uploading into game save
 
 ## Usage
 
-`python tts_deckgen/run_dek_gen.py --help`
+`python run_dek_gen.py --help`
 
 ### Sheet generation
 
 1. Prepare dir with images. Filenames will be later exported as card nicknames in game.
    ***Tip**: use `[1]`, `[2]` ... `[n]` in start or end of filename for repeating names.
    This will be cropped on generation*
-2. Run script: `python tts_deckgen/run_dek_gen.py -d input_dir` *use `-o` for specifying output dir*
+2. Run script: `python run_dek_gen.py -d input_dir` *use `-o` for specifying output dir*
 3. You now have multiple sheets in output dir: clean (without overlay) and overlayed for GW game.
 
 ### Save injection
@@ -23,10 +23,10 @@ Both options are replacing contents of deck in game (maybe appending will be imp
 
 ## TODO
 
-- [ ] Fix current bugs
-  - [ ] Broken deck insertion to save (when >69 pictures used)
-  - [ ] Broken 'Hidden' pic position behaviour in some cases
-  - [ ] Unhandled 10x1 sheet creation (game supports minimum of 2 lines)
+- [x] Fix current bugs
+  - [x] Broken deck insertion to save (when >69 pictures used)
+  - [x] Broken 'Hidden' pic position behaviour in some cases ([a8d050e](https://github.com/ZONT3/tts-deck-generator/commit/a8d050e43e874a795ef8bf3255446ea9a4525e46), NEED TESTS)
+  - [x] Unhandled 10x1 sheet creation (game supports minimum of 2 lines) ([a8d050e](https://github.com/ZONT3/tts-deck-generator/commit/a8d050e43e874a795ef8bf3255446ea9a4525e46), NEED TESTS)
 - [ ] Properties editing UI (CLI for now)
 - [x] Local paths -> Link replacement UI (CLI for now)
 - [ ] imgur integration option (instead of local file paths)

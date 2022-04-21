@@ -4,10 +4,10 @@ from argparse import ArgumentParser
 
 from tqdm import tqdm
 
-from . import image_processing as ip
-from . import save_processing as sp
-from .deck import Deck, DEFAULT_STAMP_IMAGE
-from .save_processing import SaveProcessor
+import tts_deckgen.image_processing as ip
+import tts_deckgen.save_processing as sp
+from tts_deckgen.deck import Deck, DEFAULT_STAMP_IMAGE, DeckSheet, load_cards_info
+from tts_deckgen.save_processing import SaveProcessor
 
 
 def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
@@ -26,6 +26,9 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
             name = '.'.join(f.split('.')[0:-1])
             name = re.sub(r'\s*\[\d+]$', '', name)
             name = re.sub(r'^\[\d+]\s*', '', name)
+            name = re.sub(r'^\(\d+\)\s*', '', name)
+            name = re.sub(r'^\(\d+\)\s*', '', name)
+
             info.append({'Nickname': name})
             f = os.path.join(pics_dir, f)
 
@@ -90,9 +93,18 @@ def insert_urls(game_save, output, show=True):
         print('Wrote modified file')
 
 
+def load(deck_dir, prefix):
+    return DeckSheet.load(deck_dir, prefix), load_cards_info(deck_dir, prefix)
+
+
 if __name__ == '__main__':
     p = ArgumentParser()
     p.add_argument('-d', '--pics-dir', type=str, default=None, help='Directory to grab pictures from')
+    p.add_argument('-D', '--deck-dir', type=str, default=None, help='Directory to load deck from. '
+                                                                    'Must be output dir of run '
+                                                                    'with -d option')
+    p.add_argument('-p', '--prefix', type=str, default='grid', help='Deck prefix for -D option. Can be "grid" or '
+                                                                    '"clean", or any custom')
     p.add_argument('-R', '--no-rejected', action='store_true', help='Do not generate "Rejected" as back')
     p.add_argument('-o', '--output', type=str, default='output', help='Output dir')
     p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
@@ -110,15 +122,31 @@ if __name__ == '__main__':
         if not os.path.isfile(args.game_save):
             raise AssertionError('--game-save does not represent a file')
 
+    if args.deck_dir:
+        if not os.path.isdir(args.deck_dir):
+            raise AssertionError('--deck-dir does not represent a dir')
+        if not args.game_save:
+            raise AssertionError('--game-save not set')
+        if not args.guid:
+            raise AssertionError('--guid not set')
+
+        deck = load(args.deck_dir, args.prefix)
+        p = SaveProcessor(args.game_save)
+        p.set_object(args.guid)
+        p.write_decks(deck)
+
     if args.pics_dir:
         if not os.path.isdir(args.pics_dir):
             raise AssertionError('--pics-dir does not represent a dir')
 
         grid, clean = generate_deck(args.pics_dir, args.output, args.no_rejected)
 
-        if args.guid and args.game_save:
-            p = SaveProcessor(args.game_save, args.guid)
-            p.write_decks(grid)
+        if args.game_save:
+            p = SaveProcessor(args.game_save)
+
+            if args.guid:
+                p.set_object(args.guid_clean)
+                p.write_decks(grid)
 
             if args.guid_clean:
                 p.set_object(args.guid_clean)

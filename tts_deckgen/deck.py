@@ -1,5 +1,7 @@
+import json
 import math
 import os
+import re
 from typing import List, Union, Tuple, Optional
 
 from PIL import Image as Image
@@ -34,12 +36,12 @@ class SheetGenerator:
         self.checkpoint = None
         self._init_checkpoint()
 
-    def generate(self, images_gen):
+    def generate(self, images_gen, has_hide):
         for i, im in enumerate(images_gen):
             self._insert(im)
-            self._forward(i)
+            self._forward(i, has_hide)
 
-        self.sizes.append((self.w, self.h, self.y * self.w + self.x))
+        self.sizes.append((self.w, self.y + 1, self.y * self.w + self.x))
 
     def append_hide_img(self, hide_img):
         self._insert(hide_img, self.w - 1, self.y)
@@ -47,7 +49,7 @@ class SheetGenerator:
     def get(self):
         return self.sheets, self.sizes
 
-    def _forward(self, cur_i):
+    def _forward(self, cur_i, has_hide):
         self.x += 1
 
         if self.x >= self.w:
@@ -56,7 +58,7 @@ class SheetGenerator:
 
         if self.y >= self.h or len(self.sheets) == 0:
             if len(self.sheets) > 0:
-                self.sizes.append((self.w, self.h, self.w * self.h))
+                self.sizes.append((self.w, self.h, self.w * self.h - (has_hide and 1 or 0)))
 
             if self.checkpoint is not None and cur_i >= self.checkpoint[0]:
                 new_size = self.checkpoint[1 if cur_i == self.checkpoint[0] else 2]
@@ -162,6 +164,13 @@ class DeckSheet:
         self.back_is_hidden = back_is_hidden
         self.unique_back = unique_back
 
+    @classmethod
+    def load(cls, directory, prefix):
+        with open(os.path.join(directory, f'{prefix}_deck_info.json')) as fp:
+            info_list = json.load(fp)
+        return list(map(lambda info: DeckSheet(info['face_path'], info['back_path'], tuple(info['size']),
+                                               info['back_is_hidden'], info['unique_back']), info_list))
+
 
 class Deck:
     saved_sheets: Optional[List[DeckSheet]]
@@ -196,25 +205,31 @@ class Deck:
     def save(self, output_dir, prefix):
         faces = []
         for i, s in enumerate(self.sheets):
-            path = os.path.join(output_dir, f'{prefix}_sheet_{i:02d}.png')
+            path = os.path.abspath(os.path.join(output_dir, f'{prefix}_sheet_{i:02d}.png'))
             s.save(path)
             faces.append(path)
 
         if self.back_sheets is not None:
             backs = list()
             for i, s in enumerate(self.back_sheets):
-                path = os.path.join(output_dir, f'{prefix}_back_{i:02d}.png')
+                path = os.path.abspath(os.path.join(output_dir, f'{prefix}_back_{i:02d}.png'))
                 s.save(path)
                 backs.append(path)
 
         else:
-            path = os.path.join(output_dir, f'{prefix}_back.png')
+            path = os.path.abspath(os.path.join(output_dir, f'{prefix}_back.png'))
             self.back_img.save(path)
             backs = [path for _ in range(len(faces))]
 
         self.saved_sheets = []
         for f, b, s in zip(faces, backs, self.sheets_sizes):
             self.saved_sheets.append(DeckSheet(f, b, s, not self.has_hide_img, self.back_sheets is not None))
+
+        with open(os.path.join(output_dir, f'{prefix}_deck_info.json'), 'w') as o:
+            json.dump(self.saved_sheets, o, default=vars)
+
+        with open(os.path.join(output_dir, f'{prefix}_cards_info.json'), 'w') as o:
+            json.dump(self.cards_info, o)
 
     @classmethod
     def create(cls, images: List[PILImage], info: Optional[List[dict]] = None, back_img=None, back_images=None,
@@ -275,10 +290,11 @@ class Deck:
                 images.insert(i, hide_img)
                 i += cards_per_sheet
 
-        images_gen = images if tqdm_desc is None else tqdm_inst(images, total=len(images), unit='pic', desc=f'Generating {tqdm_desc}')
+        images_gen = images if tqdm_desc is None else tqdm_inst(images, total=len(images), unit='pic',
+                                                                desc=f'Generating {tqdm_desc}')
 
         gen = SheetGenerator(sheet_width, sheet_height, card_size, len(images))
-        gen.generate(images_gen)
+        gen.generate(images_gen, hide_img is not None)
 
         if hide_img is not None:
             gen.append_hide_img(hide_img)
@@ -294,3 +310,8 @@ def _create_sheet(leftover, width, max_height, card_size, background_color=(255,
             card_size[0] * width + MARGIN * (width - 1),
             card_size[1] * height + MARGIN * (height - 1)),
         background_color)
+
+
+def load_cards_info(directory, prefix):
+    with open(os.path.join(directory, f'{prefix}_cards_info.json')) as fp:
+        return json.load(fp)
