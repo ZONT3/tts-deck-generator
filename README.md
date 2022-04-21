@@ -41,7 +41,7 @@ Tabletop Simulator Game (will be uploaded to workshop as soon as milestones reac
 
 - [x] Guess Grid generation
   - [x] Pages implementation
-  - [ ] Pages switching controls
+  - [x] Pages switching controls
 - [ ] Picking phase
   - [ ] Voting and host/promoted confirmation
 - [ ] Built-in turns usage
