@@ -533,7 +533,9 @@ end
 function GW_GAME:SetPage(ply, idx)
     local data = self:PlayerData(ply)
 
-    if idx == 0 then
+    if idx == data.page then return end
+
+    local fnc_clear = function ()
         for guid, _ in pairs(data.displayed) do
             local obj = getObjectFromGUID(guid)
             if obj then
@@ -541,6 +543,11 @@ function GW_GAME:SetPage(ply, idx)
             end
         end
         data.displayed = {}
+        data.page = 0
+    end
+
+    if idx == 0 then
+        Wait.frames(fnc_clear)
 
     else
         local page_len = #data.grid
@@ -549,37 +556,40 @@ function GW_GAME:SetPage(ply, idx)
         local ordered = data.cards_ordered
         local rotation = self:GetPlyInst(ply).getHandTransform().rotation
         local list = self:GetGridCardList()
-        data.displayed = {}
 
         rotation.y = (rotation.y + 180) % 360
 
-        self:SetPage(ply, 0)
-
-        for i = start, stop do
-            if #ordered < i then
-                break
+        local fnc = function()
+            for i = start, stop do
+                if #ordered < i then
+                    break
+                end
+    
+                local diff = i - start
+                local pos = data.grid[diff + 1]
+                pos = {
+                    pos.x,
+                    self.data.game_height + (CARD_MIN_MARGIN <= 0 and diff * CARD_OVERLAP_STEP or 0),
+                    pos.z
+                }
+                local card_name = ordered[i]
+                local card = self:FindCard(card_name, list)
+                local flipped = data.card_states[card_name]
+                local r = {rotation.x, rotation.y, flipped and 180 or 0}
+    
+                local obj = self:DuplicateCard(card, pos, r)
+                obj.setLock(false)
+                obj.addTag(self:PlyTag(ply, 'gridZone'))
+                data.displayed[obj.getGUID()] = {pos = pos, r = r}
             end
-
-            local diff = i - start
-            local pos = data.grid[diff + 1]
-            pos = {
-                pos.x,
-                self.data.game_height + (CARD_MIN_MARGIN <= 0 and diff * CARD_OVERLAP_STEP or 0),
-                pos.z
-            }
-            local card_name = ordered[i]
-            local card = self:FindCard(card_name, list)
-            local flipped = data.card_states[card_name]
-            local r = {rotation.x, rotation.y, flipped and 180 or 0}
-
-            local obj = self:DuplicateCard(card, pos, r)
-            obj.setLock(false)
-            obj.addTag(self:PlyTag(ply, 'gridZone'))
-            data.displayed[obj.getGUID()] = {pos = pos, r = r}
+            data.page = idx
         end
-    end
 
-    data.page = idx
+        Wait.frames(function ()
+            fnc_clear()
+            Wait.frames(fnc)
+        end)
+    end
 end
 
 function GW_GAME:DuplicateObj(data, pos, r, rest)
