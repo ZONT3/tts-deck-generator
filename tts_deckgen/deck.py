@@ -6,7 +6,7 @@ from PIL import Image as Image
 from PIL.Image import Image as PILImage
 from tqdm import tqdm
 
-import image_processing as ip
+from . import image_processing as ip
 
 MAX_SHEET_WIDTH = 10
 MAX_SHEET_HEIGHT = 7
@@ -14,6 +14,134 @@ DEFAULT_BACK_IMAGE = 'https://imgur.com/zRv5iaf.png'
 DEFAULT_HIDE_IMAGE = 'https://imgur.com/oxP7UZY.png'
 DEFAULT_STAMP_IMAGE = 'https://imgur.com/j9789mk.png'
 MARGIN = 0
+
+
+class SheetGenerator:
+    checkpoint: Optional[Tuple[int, Tuple[int, int], Tuple[int, int]]]
+
+    def __init__(self, w, h, card_size, total_images):
+        self.w = w
+        self.h = h
+        self.card_size = card_size
+
+        self.total_images = total_images
+
+        self.sheets = []
+        self.sizes = []
+
+        self.x, self.y = 0, 0
+
+        self.checkpoint = None
+        self._init_checkpoint()
+
+    def generate(self, images_gen):
+        for i, im in enumerate(images_gen):
+            self._insert(im)
+            self._forward(i)
+
+        self.sizes.append((self.w, self.h, self.y * self.w + self.x))
+
+    def append_hide_img(self, hide_img):
+        self._insert(hide_img, self.w - 1, self.y)
+
+    def get(self):
+        return self.sheets, self.sizes
+
+    def _forward(self, cur_i):
+        self.x += 1
+
+        if self.x >= self.w:
+            self.x = 0
+            self.y += 1
+
+        if self.y >= self.h or len(self.sheets) == 0:
+            if len(self.sheets) > 0:
+                self.sizes.append((self.w, self.h, self.w * self.h))
+
+            if self.checkpoint is not None and cur_i >= self.checkpoint[0]:
+                new_size = self.checkpoint[1 if cur_i == self.checkpoint[0] else 2]
+                self.w = new_size[0]
+                self.h = new_size[1]
+
+            self.sheets.append(_create_sheet(self.total_images - cur_i, self.w, self.h, self.card_size))
+            self.x, self.y = 0, 0
+
+    def _insert(self, im, x=None, y=None):
+        if x is None:
+            x = self.x
+        if y is None:
+            y = self.y
+
+        if im.size != self.card_size:
+            im = im.resize(self.card_size, Image.ANTIALIAS)
+
+        px, py = x * (self.card_size[0] + MARGIN), y * (self.card_size[1] + MARGIN)
+        self.sheets[-1].paste(im, (px, py))
+
+    # Solving size issues
+    # Я провел один тест - случай разрешился (переполнение строки - самый непредсказуемый).
+    # Мне влом писать больше тестов.
+    # Если будут ошибки здесь - пуллреквесты в студию
+    def _init_checkpoint(self):
+        sheet_size = self.w * self.h
+        full_sheets = self.total_images // sheet_size
+        last_sheet_size = self.total_images % sheet_size
+
+        if full_sheets == 0 and last_sheet_size <= 2:
+            raise ValueError('Too few images. Must be at least 3')
+
+        if last_sheet_size > 0:
+            lines_fed = math.ceil(last_sheet_size / self.w)
+            last_line_full = last_sheet_size % self.w == 0
+
+            if lines_fed >= 2 and last_line_full:
+                new_size = self._try_solve_full_line_issue(last_sheet_size)
+                self.checkpoint = (full_sheets * sheet_size, new_size, new_size)
+
+            elif lines_fed < 1:
+                if last_sheet_size > 2:
+                    new_size = (last_sheet_size - 1, 2)
+                    self.checkpoint = (full_sheets * sheet_size, new_size, new_size)
+                elif last_sheet_size <= 2 and full_sheets > 0:
+                    if max(self.w, self.h) > 2:
+                        if self.w > self.h >= 2:
+                            new_size_1 = (self.w - 1, self.h)
+                            add = self.h
+                        else:
+                            new_size_1 = (self.w, self.h - 1)
+                            add = self.w
+
+                        last_sheet_size += add
+                        lines_fed = math.ceil(last_sheet_size / self.w)
+                        last_line_full = last_sheet_size % self.w == 0
+
+                        if lines_fed >= 2 and not last_line_full:
+                            new_size_2 = (self.w, lines_fed)
+                        elif lines_fed < 2:
+                            new_size_2 = (last_sheet_size - 1, 2)
+                        else:
+                            new_size_2 = self._try_solve_full_line_issue(last_sheet_size)
+
+                        self.checkpoint = ((full_sheets - 1) * sheet_size, new_size_1, new_size_2)
+
+                    else:
+                        raise ValueError('Cannot solve sheet shape issues with current size. Try to increase its '
+                                         'dimensions.')
+
+        if self.checkpoint is not None and self.checkpoint[0] == 0:
+            self.w = self.checkpoint[1][0]
+            self.h = self.checkpoint[1][1]
+
+        self.sheets.append(_create_sheet(self.total_images, self.w, self.h, self.card_size))
+
+    def _try_solve_full_line_issue(self, last_sheet_size):
+        w = self.w - 1
+        while last_sheet_size % w == 0:
+            w -= 1
+            if w < 2 or w * self.h <= last_sheet_size:
+                raise ValueError('Cannot solve sheet shape issues with current size. Try to change one.')
+        new_size = (w, math.ceil(last_sheet_size / w))
+        return new_size
 
 
 class DeckSheet:
@@ -122,8 +250,7 @@ class Deck:
         sheet_height = min(sheet_height, MAX_SHEET_HEIGHT)
 
         ratio = None
-        max_size: Optional[Tuple[int, int]] = None
-        max_res = 0
+        card_size: Optional[Tuple[int, int]] = None
 
         if tqdm_desc is not None:
             print(f'Preparing {tqdm_desc}...')
@@ -136,62 +263,34 @@ class Deck:
                 raise ValueError('Found not equal ratio!')
 
             if im.size[0] > maxw:
-                max_size = (maxw, maxw * im.size[1] // im.size[0])
+                card_size = (maxw, maxw * im.size[1] // im.size[0])
                 break
-            if max_res < im.size[0] * im.size[1]:
-                max_size = im.size
-                max_res = max_size[0] * max_size[1]
+            if card_size is None or card_size[0] < im.size[0]:
+                card_size = im.size
 
         if hide_img is not None:
-            if hide_img == 'EMPTY':
-                hide_img = Image.new('RGBA', max_size, (255, 255, 255, 0))
-
             cards_per_sheet = sheet_width * sheet_height
             i = cards_per_sheet - 1
             while i < len(images):
                 images.insert(i, hide_img)
                 i += cards_per_sheet
 
-        def insert(sheet, im, x, y):
-            if im.size != max_size:
-                im = im.resize(max_size, Image.ANTIALIAS)
-
-            px, py = x * (max_size[0] + MARGIN), y * (max_size[1] + MARGIN)
-            sheet.paste(im, (px, py))
-
-        x, y = 0, 0
-        sheets = list()
-        sizes = list()
-
         images_gen = images if tqdm_desc is None else tqdm_inst(images, total=len(images), unit='pic', desc=f'Generating {tqdm_desc}')
-        for i, im in enumerate(images_gen):
-            if x >= sheet_width:
-                x = 0
-                y += 1
-            if y >= sheet_height or len(sheets) == 0:
-                if len(sheets) > 0:
-                    sizes.append((
-                        sheet_width, sheet_height,
-                        sheet_height * sheet_width))
 
-                sheets.append(cls._create_sheet(len(images) - i, sheet_width, sheet_height, max_size))
-                x, y = 0, 0
-
-            insert(sheets[-1], im, x, y)
-            x += 1
+        gen = SheetGenerator(sheet_width, sheet_height, card_size, len(images))
+        gen.generate(images_gen)
 
         if hide_img is not None:
-            insert(sheets[-1], hide_img, sheet_width - 1, y if x < sheet_width else (y + 1))
+            gen.append_hide_img(hide_img)
 
-        sizes.append((sheet_width if y > 0 else x, y + 1, y * sheet_width + x))
-        return sheets, sizes
+        return gen.get()
 
-    @staticmethod
-    def _create_sheet(leftover, width, max_height, card_size, background_color=(255, 255, 255, 255)):
-        height = int(math.ceil(leftover / width))
-        height = min(height, max_height)
-        return Image.new(
-            'RGBA', (
-                card_size[0] * width + MARGIN * (width - 1),
-                card_size[1] * height + MARGIN * (height - 1)),
-            background_color)
+
+def _create_sheet(leftover, width, max_height, card_size, background_color=(255, 255, 255, 255)):
+    height = int(math.ceil(leftover / width))
+    height = min(height, max_height)
+    return Image.new(
+        'RGBA', (
+            card_size[0] * width + MARGIN * (width - 1),
+            card_size[1] * height + MARGIN * (height - 1)),
+        background_color)

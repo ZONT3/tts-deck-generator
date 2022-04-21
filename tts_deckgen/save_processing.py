@@ -3,7 +3,7 @@ import os.path
 import random
 import shutil
 
-from deck import Deck
+from .deck import Deck
 
 _reference_fallback_contained_object = """{
   "GUID": "fc648e",
