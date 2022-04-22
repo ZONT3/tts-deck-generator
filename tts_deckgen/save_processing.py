@@ -136,6 +136,7 @@ class SaveProcessor:
         self.deck_obj['ContainedObjects'] += contained_objects
 
         if not self.referenced:
+            self.deck_obj['GUID'] = self.obj_guid
             for i, o in enumerate(self.save_obj['ObjectStates']):
                 if o['GUID'] == self.obj_guid:
                     self.deck_obj.update(self.save_props)

@@ -80,6 +80,8 @@ def insert_urls(game_save, output, show=True):
 
         if replacement in ['a', 'abort']:
             return
+        if 'https://imgur.com/' in replacement and replacement.lower().split('.')[-1] not in ['jpg', 'png', 'jpeg']:
+            replacement += '.png'
 
         fn = sp.to_file_path(fn).replace('\\', '\\\\')
         out = buf.replace(fn, replacement)
@@ -120,6 +122,7 @@ def main():
     p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
     p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save')
     p.add_argument('-G', '--guid-clean', type=str, default=None, help='Target second (clean) deck')
+    p.add_argument('-a', '--append', action='store_true', help='Append to deck in save instead of overwrite')
 
     p.add_argument('-i', '--show-img', action='store_true', help='Show images for --insert-url interaction. '
                                                                  'Uses PIL.Image.Image.show()')
@@ -135,11 +138,13 @@ def main():
             raise AssertionError('--game-save not set')
 
         bak = args.game_save + '.ttsdg.bak'
+        bak_fallback = args.game_save + '.bak'
+
         if os.path.isfile(bak):
             print(f'Found untouched save, last modified: {datetime.datetime.fromtimestamp(os.path.getmtime(bak))}')
 
         else:
-            bak = args.game_save + '.bak'
+            bak = bak_fallback
             if os.path.isfile(bak):
                 print(f'Not found save in untouched state, but found backup, last modified: '
                       f'{datetime.datetime.fromtimestamp(os.path.getmtime(bak))}')
@@ -153,6 +158,8 @@ def main():
 
         os.remove(args.game_save)
         shutil.copy(bak, args.game_save)
+        shutil.copy(bak, bak_fallback)
+        os.remove(bak)
         return
 
     if args.deck_dir:
@@ -165,7 +172,7 @@ def main():
 
         deck = load(args.deck_dir, args.prefix)
         p = SaveProcessor(args.game_save)
-        p.set_object(args.guid)
+        p.set_object(args.guid, append_content=args.append)
         p.write_decks(deck)
 
     elif args.pics_dir:
@@ -178,14 +185,16 @@ def main():
             p = SaveProcessor(args.game_save)
 
             if args.guid:
-                p.set_object(args.guid_clean)
+                p.set_object(args.guid_clean, append_content=args.append)
                 p.write_decks(grid)
 
             if args.guid_clean:
-                p.set_object(args.guid_clean)
+                p.set_object(args.guid_clean, append_content=args.append)
                 p.write_decks(clean)
 
-    if args.insert_url and args.game_save:
+    if args.insert_url:
+        if not args.game_save:
+            raise AssertionError('--game-save not set')
         insert_urls(args.game_save, args.output, args.show_img)
 
 
