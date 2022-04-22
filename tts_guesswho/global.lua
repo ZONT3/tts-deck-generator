@@ -22,7 +22,7 @@ CONTROL_TABLE_SIZE_KOEF = 500
 CONTROL_TABLE_W = 16.8
 CONTROL_TABLE_H = 31.5
 
-ENABLE_ZERO_PAGE = true
+ENABLE_ZERO_PAGE = false
 
 PLAYER_ZONES_MAPPING_ID2K = {
     'White', 'Brown', 'Red', 
@@ -156,8 +156,6 @@ STAGE_PLAY = 2
 
 GW_GAME = {}
 GW_GAME.data = {}
-GW_GAME.grid_locked = {}
-GW_GAME.objects = {}
 
 function GW_GAME:InitGame(config)
     print(' ==== GW Game Init ==== ')
@@ -166,9 +164,11 @@ function GW_GAME:InitGame(config)
     self.data.players = {}
     self.data.prepared_players = {}
 
-    for _, v in pairs(self.objects) do
-        if v then
-            v.destroyObject()
+    if self.objects then
+        for _, v in pairs(self.objects) do
+            if v then
+                v.destroyObject()
+            end
         end
     end
     self.objects = {}
@@ -531,7 +531,6 @@ function GW_GAME:GetPlyInst(ply)
 end
 
 function GW_GAME:SetPage(ply, idx)
-    if self.grid_locked[ply] then return end
     local data = self:PlayerData(ply)
 
     if idx == data.page then return end
@@ -551,8 +550,6 @@ function GW_GAME:SetPage(ply, idx)
         Wait.frames(fnc_clear)
 
     else
-        self.grid_locked[ply] = true
-
         local page_len = #data.grid
         local start = page_len * (idx - 1) + 1
         local stop = start + page_len - 1
@@ -586,7 +583,6 @@ function GW_GAME:SetPage(ply, idx)
                 data.displayed[obj.getGUID()] = {pos = pos, r = r}
             end
             data.page = idx
-            self.grid_locked[ply] = false
         end
 
         Wait.frames(function ()
@@ -685,26 +681,26 @@ function GW_GAME:GenerateGridPoints(p_tl, p_br, w, h)
 end
 
 function onSave()
-    if GW_GAME.data.init_done then
-        GW_GAME.data.objects = {}
-        for k, v in pairs(GW_GAME.objects) do
-            if v then
-                GW_GAME.data.objects[k] = v.guid
-            end
-        end
-        return JSON.encode(GW_GAME.data)
-    end
+    -- if GW_GAME.data.init_done then
+    --     GW_GAME.data.objects = {}
+    --     for k, v in pairs(GW_GAME.objects) do
+    --         if v then
+    --             GW_GAME.data.objects[k] = v.guid
+    --         end
+    --     end
+    --     return JSON.encode(GW_GAME.data)
+    -- end
 end
 
 function onLoad(state)
-    if #state > 0 then
-       GW_GAME.data = JSON.decode(state)
-        for k, v in pairs(GW_GAME.data.objects) do
-            if not GW_GAME.objects[k] then
-                GW_GAME.objects[k] = getObjectFromGUID(v)
-            end
-        end
-    end
+    -- if #state > 0 then
+    --    GW_GAME.data = JSON.decode(state)
+    --     for k, v in pairs(GW_GAME.data.objects) do
+    --         if not GW_GAME.objects[k] then
+    --             GW_GAME.objects[k] = getObjectFromGUID(v)
+    --         end
+    --     end
+    -- end
 
     local start_btn = getObjectFromGUID(GUID_START_BUTTON)
     if start_btn and not GW_GAME.data.init_done then
