@@ -3,7 +3,9 @@ import os.path
 import re
 import shutil
 from argparse import ArgumentParser
+from typing import Optional
 
+from PIL import Image, ImageColor
 from tqdm import tqdm
 
 import tts_deckgen.image_processing as ip
@@ -12,9 +14,12 @@ from tts_deckgen.deck import Deck, DEFAULT_STAMP_IMAGE, DeckSheet, load_cards_in
 from tts_deckgen.save_processing import SaveProcessor
 
 
-def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
+def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None, bg_color: Optional[str] = 'FFFFFF'):
     if tqdm_inst is None:
         tqdm_inst = tqdm
+
+    if bg_color is not None:
+        bg_color = ImageColor.getrgb(f'#{bg_color.lower()}ff')
 
     stamp_img = ip.download_img(DEFAULT_STAMP_IMAGE)
     info = []
@@ -41,9 +46,9 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
                 pics_back.append(ip.stamp(fixed, stamp_img))
 
     print('DECK: grid')
-    grid_deck = Deck.create(pics_face, back_images=pics_back, info=info, tqdm_inst=tqdm_inst)
+    grid_deck = Deck.create(pics_face, back_images=pics_back, info=info, tqdm_inst=tqdm_inst, bg_color=bg_color)
     print('DECK: clean')
-    clean_deck = Deck.create(pics_fixed, tqdm_inst=tqdm_inst, info=info)
+    clean_deck = Deck.create(pics_fixed, tqdm_inst=tqdm_inst, info=info, bg_color=bg_color)
 
     print('Saving...')
     os.makedirs(output_dir, exist_ok=True)
@@ -55,9 +60,6 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None):
 
 
 def insert_urls(game_save, output, show=True):
-    if show:
-        from PIL import Image
-
     with open(game_save, 'r') as sav:
         sav = sav.read()
     buf = sav
@@ -126,8 +128,14 @@ def main():
 
     p.add_argument('-i', '--show-img', action='store_true', help='Show images for --insert-url interaction. '
                                                                  'Uses PIL.Image.Image.show()')
+    p.add_argument('--bg-color', type=str, default='FFFFFF', help='Background color (HEX 6 digits only, like AABBCC) '
+                                                                  'for replacing transparency.')
+    p.add_argument('--keep-transparency', action='store_true', help='Keep transparency. Overrides --bg-color option.')
 
     args = p.parse_args()
+
+    if args.keep_transparency:
+        args.bg_color = None
 
     if args.game_save:
         if not os.path.isfile(args.game_save):
@@ -179,7 +187,7 @@ def main():
         if not os.path.isdir(args.pics_dir):
             raise AssertionError('--pics-dir does not represent a dir')
 
-        grid, clean = generate_deck(args.pics_dir, args.output, args.no_rejected)
+        grid, clean = generate_deck(args.pics_dir, args.output, no_rejected=args.no_rejected, bg_color=args.bg_color)
 
         if args.game_save:
             p = SaveProcessor(args.game_save)

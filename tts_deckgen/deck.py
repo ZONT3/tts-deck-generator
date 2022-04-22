@@ -21,16 +21,15 @@ MARGIN = 0
 class SheetGenerator:
     checkpoint: Optional[Tuple[int, Tuple[int, int], Tuple[int, int]]]
 
-    def __init__(self, w, h, card_size, total_images):
+    def __init__(self, w, h, card_size, total_images, bg_color: Optional[Tuple[int, int, int]]):
         self.w = w
         self.h = h
         self.card_size = card_size
-
         self.total_images = total_images
+        self.bg_color = bg_color
 
         self.sheets = []
         self.sizes = []
-
         self.x, self.y = 0, 0
 
         self.checkpoint = None
@@ -76,6 +75,10 @@ class SheetGenerator:
 
         if im.size != self.card_size:
             im = im.resize(self.card_size, Image.ANTIALIAS)
+
+        if self.bg_color is not None:
+            bg = Image.new('RGBA', im.size, self.bg_color)
+            im = Image.alpha_composite(bg, im)
 
         px, py = x * (self.card_size[0] + MARGIN), y * (self.card_size[1] + MARGIN)
         self.sheets[-1].paste(im, (px, py))
@@ -234,7 +237,8 @@ class Deck:
     @classmethod
     def create(cls, images: List[PILImage], info: Optional[List[dict]] = None, back_img=None, back_images=None,
                insert_hide=True, hide_img=None,
-               sheet_width=MAX_SHEET_WIDTH, sheet_height=MAX_SHEET_HEIGHT, maxw=720, enable_tqdm=True, tqdm_inst=tqdm):
+               sheet_width=MAX_SHEET_WIDTH, sheet_height=MAX_SHEET_HEIGHT,
+               maxw=720, enable_tqdm=True, tqdm_inst=tqdm, bg_color=(255, 255, 255, 255)):
         if info is None:
             info = [{} for _ in range(len(images))]
         else:
@@ -250,17 +254,16 @@ class Deck:
             if len(images) != len(back_images):
                 raise ValueError(f'Back images are represented as sheet, but found size mismatch with faces sheet '
                                  f'({len(images)} vs. {len(back_images)})')
-            back_images, _ = cls.generate_sheets(back_images, sheet_width, sheet_height, back_img, maxw,
-                                                 'backs' if enable_tqdm else None, tqdm_inst=tqdm_inst)
+            back_images, _ = cls._generate_sheets(back_images, sheet_width, sheet_height, back_img, maxw,
+                                                 'backs' if enable_tqdm else None, tqdm_inst, bg_color)
 
-        sheets, sizes = cls.generate_sheets(images, sheet_width, sheet_height, hide_img, maxw,
-                                            'faces' if enable_tqdm else None, tqdm_inst=tqdm_inst)
+        sheets, sizes = cls._generate_sheets(images, sheet_width, sheet_height, hide_img, maxw,
+                                            'faces' if enable_tqdm else None, tqdm_inst, bg_color)
 
         return Deck(sheets, back_img, back_images, insert_hide, sizes, info)
 
     @classmethod
-    def generate_sheets(cls, images, sheet_width, sheet_height,
-                        hide_img=None, maxw=720, tqdm_desc=None, tqdm_inst=tqdm):
+    def _generate_sheets(cls, images, sheet_width, sheet_height, hide_img, maxw, tqdm_desc, tqdm_inst, bg_color):
         sheet_width = min(sheet_width, MAX_SHEET_WIDTH)
         sheet_height = min(sheet_height, MAX_SHEET_HEIGHT)
 
@@ -293,7 +296,7 @@ class Deck:
         images_gen = images if tqdm_desc is None else tqdm_inst(images, total=len(images), unit='pic',
                                                                 desc=f'Generating {tqdm_desc}')
 
-        gen = SheetGenerator(sheet_width, sheet_height, card_size, len(images))
+        gen = SheetGenerator(sheet_width, sheet_height, card_size, len(images), bg_color)
         gen.generate(images_gen, hide_img is not None)
 
         if hide_img is not None:
