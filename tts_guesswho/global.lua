@@ -19,12 +19,12 @@ POS_OPERATING_TABLE = Vector({0.00, -2, 85.77})
 
 CONTROL_TABLE_ELEVATION = 1.0
 CONTROL_TABLE_SIZE_KOEF = 500
-CONTROL_TABLE_W = 16.8
-CONTROL_TABLE_H = 31.5
+CONTROL_TABLE_W = 31.5
+CONTROL_TABLE_H = 16.8
 
 ENABLE_ZERO_PAGE = false
 
-PLAYER_ZONES_MAPPING_ID2K = {
+PLAYER_MAPPING_ID2K = {
     'White', 'Brown', 'Red', 
     'Orange', 'Yellow', 'Green', 
     'Teal', 'Blue', 'Purple', 'Pink'
@@ -91,9 +91,9 @@ end
 
 ROTATED_PLAYERS = FlipKV(ROTATED_PLAYERS)
 
-PLAYER_ZONES_MAPPING_K2ID = {}
-for k, v in pairs(PLAYER_ZONES_MAPPING_ID2K) do
-    PLAYER_ZONES_MAPPING_K2ID[v] = k
+PLAYER_MAPPING_K2ID = {}
+for k, v in pairs(PLAYER_MAPPING_ID2K) do
+    PLAYER_MAPPING_K2ID[v] = k
 end
 
 
@@ -195,7 +195,7 @@ function GW_GAME:InitPlayer(player, card_name)
     data.displayed = {}
     data.page = 0
 
-    local pl_id = PLAYER_ZONES_MAPPING_K2ID[player]
+    local pl_id = PLAYER_MAPPING_K2ID[player]
     local rotate = ROTATED_PLAYERS[pl_id]
     local card_w = not rotate and CARD_W or CARD_H
     local card_h = not rotate and CARD_H or CARD_W
@@ -266,6 +266,8 @@ function GW_GAME:InitZones()
         end
     end
 
+    self.data.player_zones_objs = {}
+
     for i, z in ipairs(self.data.player_zones) do
         local hw = (z.br.x - z.tl.x) / 2
         local hh = (z.tl.z - z.br.z) / 2
@@ -274,9 +276,9 @@ function GW_GAME:InitZones()
                 self.data.game_height,
                 z.br.z + hh)
         local scale = Vector(hw * 2, 2, hh * 2)
-        local name = PLAYER_ZONES_MAPPING_ID2K[i]
+        local name = PLAYER_MAPPING_ID2K[i]
 
-        spawnObject({
+        local obj = spawnObject({
             type = 'ScriptingTrigger',
             position = pos,
             scale = scale,
@@ -287,6 +289,7 @@ function GW_GAME:InitZones()
                 obj.addTag(self:PlyTag(name, 'gridZone'))
             end
         })
+        self.data.player_zones_objs[i] = obj.guid
     end
 end
 
@@ -375,7 +378,7 @@ function GW_GAME:InitControlDesk(player, num_pages)
             cdesk.createButton({
                 label=tostring(string.char(left and 8249 or 8250)),
                 font_size=200, rotation={0,180,180},
-                width=size * k, height=size * k, position={x, -0.1, desk_w / 2},
+                width=size * k, height=size * k, position={x, -0.1, desk_h / 2},
                 click_function=fnc_name
             })
 
@@ -391,12 +394,19 @@ function GW_GAME:InitControlDesk(player, num_pages)
 
             cdesk.createButton({
                 label=tostring(page), font_size=200, rotation={0,180,180},
-                width=size * k, height=size * k, position={x, -0.1, desk_w / 2},
+                width=size * k, height=size * k, position={x, -0.1, desk_h / 2},
                 click_function=fnc_name
             })
         end
         x = x + size + space
     end
+
+    cdesk.createButton({
+        label="TIP: You can use custom keys (numpad by default) for selecting pages 1-9",
+        font_size=50, rotation={0,180,180},
+        width=0, height=0, position={center, -0.1, desk_h / 2 - size},
+        click_function="none"
+    })
 end
 
 function GW_GAME:GetControlDesk(player)
@@ -405,6 +415,41 @@ end
 
 function GW_GAME:PlyTag(ply, tag)
     return (tag or 'tag')..':'..ply
+end
+
+function GW_GAME:CanPlayerFlip(ply, obj)
+    local data = self:PlayerData(ply)
+    if not data then return end
+
+    local ply_id = PLAYER_MAPPING_K2ID[ply]
+    local ply_zone = getObjectFromGUID(self.data.player_zones_objs[ply_id])
+    if ply_zone.hasMatchingTag(obj) then
+        return true
+    end
+
+    for p, _ in pairs(self.data.players) do
+        if p ~= ply then
+            local p_id = PLAYER_MAPPING_K2ID[p]
+            local zone = getObjectFromGUID(self.data.player_zones_objs[p_id])
+            if zone.hasMatchingTag(obj) then
+                return false
+            end
+        end
+    end
+
+    return 0
+end
+
+function GW_GAME:OnPlayerFlippedObj(ply, obj, invert)
+    local data = self:PlayerData(ply)
+    if not data then return end
+
+    local state = obj.is_face_down
+    if invert then
+        state = not state
+    end
+
+    data.card_states[obj.getName()] = state
 end
 
 function GW_GAME:FixNameCollisions()
@@ -518,6 +563,11 @@ function GW_GAME:GetCardNamesOrdered(card_set)
             table.insert(sorted, k)
         end
         table.sort(sorted, function(a, b) return weighted[a] < weighted[b] end)
+
+        if not shuffle then
+            self.data.static_order = sorted
+        end
+
         return sorted
     end
 end
@@ -533,7 +583,20 @@ end
 function GW_GAME:SetPage(ply, idx)
     local data = self:PlayerData(ply)
 
+    if not data then return end
     if idx == data.page then return end
+
+    if not idx then idx = data.page + 1 end
+
+    local page_len = #data.grid
+    local ordered = data.cards_ordered
+    local pages_total = math.ceil(#ordered / page_len)
+
+    if idx < 0 then idx = pages_total - idx + 1 end
+    if idx > pages_total then 
+        idx = (idx % pages_total)
+        idx = idx > 0 and idx or pages_total
+    end
 
     local fnc_clear = function ()
         for guid, _ in pairs(data.displayed) do
@@ -550,10 +613,8 @@ function GW_GAME:SetPage(ply, idx)
         Wait.frames(fnc_clear)
 
     else
-        local page_len = #data.grid
         local start = page_len * (idx - 1) + 1
         local stop = start + page_len - 1
-        local ordered = data.cards_ordered
         local rotation = self:GetPlyInst(ply).getHandTransform().rotation
         local list = self:GetGridCardList()
 
@@ -744,3 +805,38 @@ function onBlindfold()
     end
     GW_GAME:PlayerBlindfoldChanged(tbl)
 end
+
+function onScriptingButtonUp(index, color)
+    GW_GAME:SetPage(color, index < 10 and index or nil)
+end
+
+function onPlayerAction(player, action, targets)
+    if action == Player.Action.FlipOver
+        or action == Player.Action.FlipIncrementalLeft
+        or action == Player.Action.FlipIncrementalRight
+    then
+        local res = true
+        for _, obj in ipairs(targets) do
+            local can_he = GW_GAME:CanPlayerFlip(player.color, obj)
+            if can_he == false then
+                res = false
+                broadcastToColor("DO NOT touch other player's cards!", player.color, Color.Red)
+                break
+            elseif action == Player.Action.FlipOver and can_he == true then
+                GW_GAME:OnPlayerFlippedObj(player.color, obj, true)
+            end
+        end
+        return res
+    end
+
+    return true
+end
+
+function onObjectDrop(player, obj)
+    if GW_GAME:CanPlayerFlip(player, obj) then
+        GW_GAME:OnPlayerFlippedObj(player, obj, false)
+    end
+end
+
+
+function none() end
