@@ -19,9 +19,9 @@ GUIDS_REMOVE_AT_START = {'893b37'}
 
 POS_OPERATING_TABLE = Vector({0.00, -2, 85.77})
 
-CONTROL_TABLE_ELEVATION = 1.0
+CONTROL_TABLE_ELEVATION = -0.95
 CONTROL_TABLE_SIZE_KOEF = 500
-CONTROL_TABLE_W = 31.5
+CONTROL_TABLE_W = 27
 CONTROL_TABLE_H = 16.8
 
 ENABLE_ZERO_PAGE = false
@@ -246,6 +246,7 @@ function GW_GAME:StartGame()
             if p.color ~= pp.color then
                 local obj = self:DuplicateHandCard(card)
                 obj.setName('['..Color.fromString(p.color):toHex(false)..']'..card.name)
+                obj.setDescription(p.steam_name.."'s guess target\n\n"..obj.getDescription())
                 obj.deal(1, pp.color)
             end
         end
@@ -324,13 +325,18 @@ end
 function GW_GAME:SpawnControlDesk(player)
     local ply = self:GetPlyInst(player)
     local transform = ply.getHandTransform()
-    local r = transform.rotation
+    local r = Vector({0, transform.rotation.y, 0})
     local pos = transform.position - RotToDir(r) * 12
-    return self:DuplicateObj(
-        getObjectFromGUID(GUID_OPERATING_TABLE).getData(),
+
+    local desk = getObjectFromGUID(GUID_OPERATING_TABLE)
+    local cdesk = self:DuplicateObj(
+        desk.getData(),
         {pos.x, CONTROL_TABLE_ELEVATION, pos.z},
-        {r.x, r.y, 180},
-        {scale = {1,1,1}})
+        {0, -r.y, 0}, {scale = {0.85,1,1}})
+
+    cdesk.UI.setXml(desk.UI.getXml())
+    -- print(desk.UI.getXml())
+    return cdesk
 end
 
 function GW_GAME:InitControlDesk(player, num_pages)
@@ -346,7 +352,7 @@ function GW_GAME:InitControlDesk(player, num_pages)
     local center = 0
     local space = 0.05
     local size = 220 / k
-    
+
     local max_bt_count = math.floor(desk_w / (space + size))
     local num_buttons = math.min(max_bt_count, num_pages + 2)
 
@@ -373,8 +379,8 @@ function GW_GAME:InitControlDesk(player, num_pages)
 
             cdesk.createButton({
                 label=tostring(string.char(left and 8249 or 8250)),
-                font_size=200, rotation={0,180,180},
-                width=size * k, height=size * k, position={x, -0.1, desk_h / 2},
+                font_size=200,
+                width=size * k, height=size * k, position={x, 0.65, - desk_h / 2},
                 click_function=fnc_name
             })
 
@@ -389,20 +395,20 @@ function GW_GAME:InitControlDesk(player, num_pages)
             end
 
             cdesk.createButton({
-                label=tostring(page), font_size=200, rotation={0,180,180},
-                width=size * k, height=size * k, position={x, -0.1, desk_h / 2},
+                label=tostring(page), font_size=200,
+                width=size * k, height=size * k, position={x, 0.65, - desk_h / 2},
                 click_function=fnc_name
             })
         end
         x = x + size + space
     end
 
-    cdesk.createButton({
-        label="TIP: You can use custom keys (numpad by default) for selecting pages 1-9",
-        font_size=50, rotation={0,180,180},
-        width=0, height=0, position={center, -0.1, desk_h / 2 - size},
-        click_function="none"
-    })
+    local try = function ()
+        cdesk.UI.show('main')
+    end
+    Wait.condition(try, function () return not cdesk.UI.loading end, 15, function ()
+        print('ERROR: Cannot load control desk UI')
+    end)
 end
 
 function GW_GAME:GetControlDesk(player)
@@ -836,6 +842,7 @@ function GW_GAME:GenerateGridPoints(p_tl, p_br, w, h)
     return res
 end
 
+
 function onSave()
     -- if GW_GAME.data.init_done then
     --     GW_GAME.data.objects = {}
@@ -857,17 +864,6 @@ function onLoad(state)
     --         end
     --     end
     -- end
-
-    local start_btn = getObjectFromGUID(GUID_START_BUTTON)
-    if start_btn and not GW_GAME.data.init_done then
-        start_btn.createButton({
-            label="Start Game", font_size=200,
-            width=1400, height=440, position={0, 0.1, 0},
-            click_function="onClickStartGame"
-        })
-    elseif start_btn then
-        destroyObject(start_btn)
-    end
 end
 
 
@@ -875,23 +871,13 @@ end
 
 function onClickStartGame()
     GW_GAME:InitGame()
-    local start_btn = getObjectFromGUID(GUID_START_BUTTON)
-    if start_btn then
-        start_btn.clearButtons()
-        start_btn.createButton({
-            label="Pick Done", font_size=200,
-            width=1400, height=440, position={0, 0.1, 0},
-            click_function="onClickPickDone"
-        })
-    end
+    UI.hide('startGame')
+    UI.show('pickDone')
 end
 
 function onClickPickDone()
     GW_GAME:StartGame()
-    local start_btn = getObjectFromGUID(GUID_START_BUTTON)
-    if start_btn then
-        destroyObject(start_btn)
-    end
+    UI.hide('pickDone')
 end
 
 
@@ -946,6 +932,7 @@ function onObjectDrop(player, obj)
 end
 
 function onObjectEnterZone(zone, object)
+    if not GW_GAME.data.game_started then return end
     GW_GAME:CheckZoneEnterance(zone, object)
 end
 

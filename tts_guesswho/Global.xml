@@ -1,0 +1,106 @@
+<Defaults>
+    <Button active="false"/>
+    <Button class="init" active="true"/>
+    <Button class="start" 
+        visibility="Host"
+        width="200"
+        height="60"
+        rectAlignment="LowerCenter"
+        offsetXY="0 20"
+        colors="#282828|#E18D15|#8E8E8E|#8E8E8E"
+        textColor="#F0F0F0"
+        fontStyle="Bold"
+        fontSize="24" />
+</Defaults>
+
+<Button id="startGame" class="start init" onclick="onClickStartGame">Start Picking</Button>
+<Button id="pickDone" class="start" onclick="onClickPickDone">Start Game</Button>
+
+<!-- 
+button_normal             #282828
+button_hover              #E18D15
+button_pressed            #8E8E8E
+button_disabled           #8E8E8E
+button_highlight_a        #FF9B38
+button_highlight_b        #C8329B
+button_highlight_c        #329BC8
+button_neutral            #7F7F7F
+
+window_background         #1E1E1E
+control_background        #141414
+transparent_background    #6969699B
+divider                   #404040
+
+tab_normal                #1E1E1E
+tab_active                #C86E1E
+tab_strip                 #C86E1E
+
+motif                     #C86E1E
+motif_highlight_a         #B45A14
+motif_highlight_b         #A04614
+splash                    #5FB759
+splash_highlight          #83D14E
+glow                      #000000
+
+context_menu_background   #1E1E1EFA
+context_menu_hover        #E18D15
+context_menu_text         #F0F0F0
+context_menu_highlight    #83D14E
+
+label                     #F0F0F0
+input_text_inactive       #898989
+input_text_active         #DCDCDC
+floating_text             #373737
+note_edit_text            #9B9B9B
+caret                     #FFFFFFCC
+selection                 #FFDF8D80
+
+tooltip_background        #151515C8
+tooltip_border            #000000
+tooltip_text              #FFFFFF
+tooltip_motif             #DC8232
+
+measurement_inner         #FFFFFF
+measurement_outer         #000000
+
+radio_button_background   #282828
+radio_button_pressed      #3C3C3C
+
+check_box_background      #282828
+check_box_pressed         #3C3C3C
+
+slider_normal             #3C3C3C
+slider_pressed            #505050
+slider_label              #9B9B9B
+
+chat_tab_background       #7F7F7F80
+chat_tab_highlight        #FFC03280
+
+chat_output_background    #7F7F7F33
+chat_output_controls      #7F7F7F
+chat_input_background     #7F7F7F33
+chat_input_controls       #7F7F7F
+chat_input_text           #FFFFFF
+
+console_output_background #000000E6
+console_output_controls   #000000
+console_input_background  #000000E6
+console_input_controls    #000000
+console_input_text        #FFFFFF
+
+lua_background            #4D4D4D
+lua_text                  #C8C8C8
+lua_caret                 #FFFFFF
+lua_selection             #C8C8C880
+
+high                      #000000
+low                       #F0F0F0
+hover_highlight           #FFFFFF
+background_tint           #000000D2
+
+pure_table_a              #3B3B3B
+pure_table_b              #5E5E5E
+pure_splash               #3B3B3B
+pure_sky_above            #202A340A
+pure_sky_horizon          #1E283214
+pure_sky_below            #1E252F0A -->

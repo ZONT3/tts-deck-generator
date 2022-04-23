@@ -1,0 +1,20 @@
+<Defaults>
+    <Panel active="false"
+        ignoreLayout="true" />
+    <Text 
+        color="#F0F0F0"
+        fontSize="24"/>
+    <Text class="tip"
+        color="#F0F0F0"
+        fontSize="14"/>
+</Defaults>
+
+<Panel id="main"
+    position="0 0 -60"
+    rotation="0 0 180">
+    <Text offsetXY="820 0">|</Text>
+    <Text offsetXY="-820 0">|</Text>
+    <Text offsetXY="0 -800">------</Text>
+    <Text offsetXY="0 790" class="tip"
+    ><i><b>TIP:</b> You can use custom keys (numpad by default) for selecting pages 1-9</i></Text>
+</Panel>
