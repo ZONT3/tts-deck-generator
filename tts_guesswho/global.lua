@@ -15,6 +15,8 @@ GUID_HAND_DECK_ZONE = '3a3afd'
 GUID_START_BUTTON = '35e1ac'
 GUID_OPERATING_TABLE = 'a7d1ba'
 
+GUIDS_REMOVE_AT_START = {'893b37'}
+
 POS_OPERATING_TABLE = Vector({0.00, -2, 85.77})
 
 CONTROL_TABLE_ELEVATION = 1.0
@@ -97,55 +99,65 @@ for k, v in pairs(PLAYER_MAPPING_ID2K) do
 end
 
 
-function Card(inf, deck, from_cache)
-    if not inf or not inf.name then return end
+function Card(inf, deck, deck_hand)
+    if not inf or not inf.name then print('ERROR: Cannot init card: not inf'); return end
 
     local meta = {}
 
-    if not from_cache then
-        meta.properties = propertiesToTable(inf.description or {})
-        meta.name = inf.name
-        meta.guid = inf.guid
-    else
+    if not deck then
         for k, v in pairs(inf) do
             meta[k] = v
         end
+    else
+        meta.properties = propertiesToTable(inf.description or {})
+        meta.name = inf.name
+        meta.guid = inf.guid
+        meta.guid_hand = inf.guid_hand
     end
 
     function meta:GetData()
         if not self.data then
-            self.data = self:Operate(function(obj)
-                return obj.getData()
+            self.data, self.data_hand = self:Operate(function(obj, hand)
+                return obj.getData(), hand.getData()
             end)
         end
-        return self.data
+        return self.data, self.data_hand
     end
 
     function meta:Operate(fnc)
         if not self.operating then
-            local ref = getObjectFromGUID(self.guid)
-            if not ref and deck then
-                ref = deck.takeObject({
+            local ref_grid = getObjectFromGUID(self.guid)
+            local ref_hand = getObjectFromGUID(self.guid_hand)
+
+            if not ref_grid and deck then
+                ref_grid = deck.takeObject({
                     position = POS_OPERATING_TABLE,
                     guid = self.guid,
                     smooth = false,
                 })
-            elseif ref then
-                ref.setPosition(POS_OPERATING_TABLE)
+                ref_hand = deck_hand.takeObject({
+                    position = POS_OPERATING_TABLE,
+                    guid = self.guid_hand,
+                    smooth = false,
+                })
+            elseif ref_grid and ref_hand then
+                ref_grid.setPosition(POS_OPERATING_TABLE)
+                ref_hand.setPosition(POS_OPERATING_TABLE)
             else
                 print('ERROR: Ref to card not found')
                 return
             end
-            ref.setLock(true)
+            ref_grid.setLock(true)
+            ref_hand.setLock(true)
+
             self.data = nil
-            self.operating = ref
+            self.data_hand = nil
+
+            self.operating = ref_grid
+            self.operating_hand = ref_hand
         end
 
-        return fnc(self.operating)
-    end
-
-    function meta:IsEqual(another)
-        return self.name == another.name
+        return fnc(self.operating, self.operating_hand)
     end
 
     return meta
@@ -177,7 +189,12 @@ function GW_GAME:InitGame(config)
     TblAdd(config, DEFAULT_CONFIG, true)
     self.data.config = config
 
-    self:FixNameCollisions()
+    for _, guid in ipairs(GUIDS_REMOVE_AT_START) do
+        local obj = getObjectFromGUID(guid)
+        if obj then obj.destroyObject() end
+    end
+
+    self:InitCards()
 
     self.data.player_zones = self:GenerateGridZones(GAME_ZONE_TL, GAME_ZONE_BR, GAME_ZONE_W, GAME_ZONE_H, PLAYER_ZONE_MARGIN)
     self.data.game_height = math.max(GAME_ZONE_TL.y, GAME_ZONE_BR.y)
@@ -220,40 +237,16 @@ function GW_GAME:StartGame()
     --     self:SetPage(p, 1)
     -- end
     -- TEMP JUMPER
-    local cards = self:GetGridCardList()
+    local cards = self:GetCardList()
     for _, p in ipairs(Player.getPlayers()) do
         local card = cards[math.random(#cards)]
         self:InitPlayer(p.color, card.name)
         self:SetPage(p.color, 1)
         for _, pp in ipairs(Player.getPlayers()) do
             if p.color ~= pp.color then
-                local obj = self:DuplicateCard(card)
+                local obj = self:DuplicateHandCard(card)
                 obj.setName('['..Color.fromString(p.color):toHex(false)..']'..card.name)
                 obj.deal(1, pp.color)
-            end
-        end
-    end
-end
-
-function GW_GAME:InitDecks()
-    for name, guid in pairs({ 
-        ['grid'] = GUID_GRID_DECK_ZONE,
-        ['hand'] = GUID_HAND_DECK_ZONE
-    }) do
-        local field = name .. '_deck'
-        if not self[field] then
-            local deck = nil
-            for _, obj in ipairs(getObjectFromGUID(guid).getObjects()) do
-                if obj.type == 'Deck' or obj.type == 'DeckCustom' then
-                    deck = obj
-                    break
-                end
-            end
-            if not deck then
-                print('ERROR: '..name..' deck not found!')
-            else
-                log(field..' found: '..deck.getGUID(), 'GW')
-                self[field] = deck
             end
         end
     end
@@ -318,7 +311,7 @@ function GW_GAME:PlayerBlindfoldChanged(states)
     if self.data.picking_player then
         -- found new picker
         -- TODO show picking ui
-        local cards = self:GetGridCardList()
+        local cards = self:GetCardList()
         self.data.prepared_players[self.data.picking_player] = cards[math.random(#cards)].name
     end
 
@@ -421,16 +414,14 @@ function GW_GAME:CanPlayerFlip(ply, obj)
     local data = self:PlayerData(ply)
     if not data then return end
 
-    local ply_id = PLAYER_MAPPING_K2ID[ply]
-    local ply_zone = getObjectFromGUID(self.data.player_zones_objs[ply_id])
+    local ply_zone = self:GetPlyZone(ply)
     if ply_zone.hasMatchingTag(obj) then
         return true
     end
 
     for p, _ in pairs(self.data.players) do
         if p ~= ply then
-            local p_id = PLAYER_MAPPING_K2ID[p]
-            local zone = getObjectFromGUID(self.data.player_zones_objs[p_id])
+            local zone = self:GetPlyZone(p)
             if zone.hasMatchingTag(obj) then
                 return false
             end
@@ -438,6 +429,10 @@ function GW_GAME:CanPlayerFlip(ply, obj)
     end
 
     return 0
+end
+
+function GW_GAME:GetPlyZone(ply)
+    return getObjectFromGUID(self.data.player_zones_objs[PLAYER_MAPPING_K2ID[ply]])
 end
 
 function GW_GAME:OnPlayerFlippedObj(ply, obj, invert)
@@ -452,10 +447,9 @@ function GW_GAME:OnPlayerFlippedObj(ply, obj, invert)
     data.card_states[obj.getName()] = state
 end
 
-function GW_GAME:FixNameCollisions()
+function GW_GAME:FixNameCollisions(card_list)
     local names_set = {}
     local count = 0
-    local card_list = self:GetGridCardList()
     for _, card in ipairs(card_list) do
         local val = names_set[card.name]
         if val then
@@ -464,9 +458,12 @@ function GW_GAME:FixNameCollisions()
             if type(val) ~= "number" then
                 local new_name = old_name .. ' (1)'
                 val.name = new_name
-                val:Operate(function (obj)
+
+                val:Operate(function (obj, hand)
                     obj.setName(new_name)
+                    hand.setName(new_name)
                 end)
+
                 val = 1
             end
 
@@ -474,8 +471,9 @@ function GW_GAME:FixNameCollisions()
 
             local new_name = old_name .. ' (' .. val .. ')'
             card.name = new_name
-            card:Operate(function (obj)
+            card:Operate(function (obj, hand)
                 obj.setName(new_name)
+                hand.setName(new_name)
             end)
 
             names_set[old_name] = val
@@ -486,7 +484,6 @@ function GW_GAME:FixNameCollisions()
     end
 
     if count > 0 then
-        self.data.grid_cards_cache = self:GenerateCardsCache(card_list)
         print('Fixed ' .. count .. ' name collisions')
     end
 end
@@ -497,37 +494,83 @@ end
 
 function GW_GAME:InitCardStates()
     local res = {}
-    for _, card in ipairs(self:GetGridCardList()) do
+    for _, card in ipairs(self:GetCardList()) do
         res[card.name] = false
     end
     return res
 end
 
 function GW_GAME:FindCard(name, list)
-    for _, card in ipairs(list or self:GetGridCardList()) do
+    for _, card in ipairs(list or self:GetCardList()) do
         if card.name == name then
             return card
         end
     end
 end
 
-function GW_GAME:GetGridCardList()
-    if not self.data.grid_cards_cache then
-        self:InitCardsCache()
+function GW_GAME:GetCardList()
+    if not self.data.cards_cache then
+        self.data.cards_cache = self:GenerateCardsCache(self:LoadCards())
     end
-    return self:FromCardsCache(self.data.grid_cards_cache, self.grid_deck)
+    return self:FromCardsCache(self.data.cards_cache)
 end
 
-function GW_GAME:InitCardsCache()
-    self:InitDecks()
-    for _, name in ipairs({'grid', 'hand'}) do
-        local res = {}
-        local deck = self[name..'_deck']
-        for _, obj in ipairs(deck.getObjects()) do
-            table.insert(res, Card(obj, deck))
-        end
-        self.data[name..'_cards_cache'] = self:GenerateCardsCache(res)
+function GW_GAME:InitCards()
+    local card_list = self:LoadCards()
+
+    self:FixNameCollisions(card_list)
+
+    for _, card in ipairs(card_list) do
+        card:GetData()
     end
+    
+    self.data.cards_cache = self:GenerateCardsCache(card_list)
+end
+
+function GW_GAME:InitDecks()
+    for name, guid in pairs({ 
+        ['grid'] = GUID_GRID_DECK_ZONE,
+        ['hand'] = GUID_HAND_DECK_ZONE
+    }) do
+        local field = name .. '_deck'
+        if not self[field] then
+            local deck = nil
+            for _, obj in ipairs(getObjectFromGUID(guid).getObjects()) do
+                if obj.type == 'Deck' or obj.type == 'DeckCustom' then
+                    deck = obj
+                    break
+                end
+            end
+            if not deck then
+                print('ERROR: '..name..' deck not found!')
+            else
+                log(field..' deck found: '..deck.getGUID())
+                self[field] = deck.getGUID()
+            end
+        end
+    end
+end
+
+function GW_GAME:LoadCards()
+    self:InitDecks()
+
+    local res = {}
+    local deck = getObjectFromGUID(self.grid_deck)
+    local deck_hand = getObjectFromGUID(self.hand_deck)
+
+    local objs = deck.getObjects()
+    local objs_hand = deck_hand.getObjects()
+    if #objs ~= #objs_hand then
+        print('ERROR: Decks size not equal!')
+        return
+    end
+
+    for i, obj in ipairs(objs) do
+        obj.guid_hand = objs_hand[i].guid
+        table.insert(res, Card(obj, deck, deck_hand))
+    end
+
+    return res
 end
 
 function GW_GAME:GenerateCardsCache(tbl)
@@ -536,17 +579,19 @@ function GW_GAME:GenerateCardsCache(tbl)
         table.insert(res, {
             name = i.name,
             properties = i.properties,
+            guid_hand = i.guid_hand,
             guid = i.guid,
+            data_hand = i.data_hand,
             data = i.data,
         })
     end
     return res
 end
 
-function GW_GAME:FromCardsCache(tbl, deck)
+function GW_GAME:FromCardsCache(tbl)
     local res = {}
     for _, i in ipairs(tbl) do
-        table.insert(res, Card(i, deck, true))
+        table.insert(res, Card(i))
     end
     return res
 end
@@ -599,13 +644,12 @@ function GW_GAME:SetPage(ply, idx)
     end
 
     local fnc_clear = function ()
-        for guid, _ in pairs(data.displayed) do
-            local obj = getObjectFromGUID(guid)
+        local zone = self:GetPlyZone(ply)
+        for _, obj in pairs(zone.getObjects()) do
             if obj then
                 destroyObject(obj)
             end
         end
-        data.displayed = {}
         data.page = 0
     end
 
@@ -616,7 +660,7 @@ function GW_GAME:SetPage(ply, idx)
         local start = page_len * (idx - 1) + 1
         local stop = start + page_len - 1
         local rotation = self:GetPlyInst(ply).getHandTransform().rotation
-        local list = self:GetGridCardList()
+        local list = self:GetCardList()
 
         rotation.y = (rotation.y + 180) % 360
 
@@ -625,7 +669,7 @@ function GW_GAME:SetPage(ply, idx)
                 if #ordered < i then
                     break
                 end
-    
+
                 local diff = i - start
                 local pos = data.grid[diff + 1]
                 pos = {
@@ -637,11 +681,10 @@ function GW_GAME:SetPage(ply, idx)
                 local card = self:FindCard(card_name, list)
                 local flipped = data.card_states[card_name]
                 local r = {rotation.x, rotation.y, flipped and 180 or 0}
-    
+
                 local obj = self:DuplicateCard(card, pos, r)
                 obj.setLock(false)
                 obj.addTag(self:PlyTag(ply, 'gridZone'))
-                data.displayed[obj.getGUID()] = {pos = pos, r = r}
             end
             data.page = idx
         end
@@ -664,7 +707,11 @@ function GW_GAME:DuplicateObj(data, pos, r, rest)
 end
 
 function GW_GAME:DuplicateCard(card, pos, r)
-    return self:DuplicateObj(card:GetData(), pos, r)
+    return self:DuplicateObj(select(1, card:GetData()), pos, r)
+end
+
+function GW_GAME:DuplicateHandCard(card, pos, r)
+    return self:DuplicateObj(select(2, card:GetData()), pos, r)
 end
 
 function GW_GAME:OnCardLeft(obj)
