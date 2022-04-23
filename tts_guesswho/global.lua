@@ -31,7 +31,6 @@ PLAYER_MAPPING_ID2K = {
     'Orange', 'Yellow', 'Green', 
     'Teal', 'Blue', 'Purple', 'Pink'
 }
-ROTATED_PLAYERS = {2,3,4,7,8,9}
 
 DEFAULT_CONFIG = {
     shuffle_players_grid = false,
@@ -61,10 +60,14 @@ function TblAdd(dest, src, inherit)
     end
 end
 
-function FlipKV(tbl)
+function FlipKV(tbl, fill_instead)
     local tmp = {}
-    for _, v in ipairs(tbl) do
-        tmp[v] = true
+    for k, v in pairs(tbl) do
+        if fill_instead ~= nil then
+            tmp[v] = fill_instead
+        else
+            tmp[v] = k
+        end
     end
     return tmp
 end
@@ -91,12 +94,7 @@ function propertiesToTable(str)
 end
 
 
-ROTATED_PLAYERS = FlipKV(ROTATED_PLAYERS)
-
-PLAYER_MAPPING_K2ID = {}
-for k, v in pairs(PLAYER_MAPPING_ID2K) do
-    PLAYER_MAPPING_K2ID[v] = k
-end
+PLAYER_MAPPING_K2ID = FlipKV(PLAYER_MAPPING_ID2K)
 
 
 function Card(inf, deck, deck_hand)
@@ -172,6 +170,8 @@ GW_GAME.data = {}
 function GW_GAME:InitGame(config)
     print(' ==== GW Game Init ==== ')
     self.data.init_done = false
+    self.data.game_started = false
+
     self.data.stage = STAGE_PICKING
     self.data.players = {}
     self.data.prepared_players = {}
@@ -213,7 +213,7 @@ function GW_GAME:InitPlayer(player, card_name)
     data.page = 0
 
     local pl_id = PLAYER_MAPPING_K2ID[player]
-    local rotate = ROTATED_PLAYERS[pl_id]
+    local rotate = true
     local card_w = not rotate and CARD_W or CARD_H
     local card_h = not rotate and CARD_H or CARD_W
 
@@ -223,7 +223,7 @@ function GW_GAME:InitPlayer(player, card_name)
     local w = math.floor(zw / (card_w + math.max(CARD_MIN_MARGIN, - CARD_W * 0.8)))
     local h = math.floor(zh / card_h)
     data.grid = self:GenerateGridPoints(zone.tl, zone.br, w, h)
-    
+
     self.objects['cdesk:'..player] = self:SpawnControlDesk(player)
     self:InitControlDesk(player, math.ceil(#data.cards_ordered / #data.grid))
 
@@ -250,6 +250,8 @@ function GW_GAME:StartGame()
             end
         end
     end
+
+    self.data.game_started = true
 end
 
 function GW_GAME:InitZones()
@@ -279,6 +281,7 @@ function GW_GAME:InitZones()
             callback_function=function(obj)
                 obj.setName(name)
                 obj.setDescription('$playerZone')
+                obj.addTag('gridZone')
                 obj.addTag(self:PlyTag(name, 'gridZone'))
             end
         })
@@ -414,21 +417,64 @@ function GW_GAME:CanPlayerFlip(ply, obj)
     local data = self:PlayerData(ply)
     if not data then return end
 
-    local ply_zone = self:GetPlyZone(ply)
-    if ply_zone.hasMatchingTag(obj) then
+    if obj.hasTag(self:PlyTag(ply, 'gridZone')) then
         return true
     end
 
     for p, _ in pairs(self.data.players) do
         if p ~= ply then
-            local zone = self:GetPlyZone(p)
-            if zone.hasMatchingTag(obj) then
+            if obj.hasTag(self:PlyTag(p, 'gridZone')) then
                 return false
             end
         end
     end
 
     return 0
+end
+
+function GW_GAME:CheckZoneEnterance(zone, obj)
+    local owner_tag
+    local player_owner
+
+    for p, _ in pairs(self.data.players) do
+        local tag = self:PlyTag(p, 'gridZone')
+        if obj.hasTag(tag) then
+            owner_tag = tag
+            player_owner = p
+            break
+        end
+    end
+
+    if not owner_tag then return end
+
+    if not zone.hasTag(owner_tag) then
+        destroyObject(obj)
+        
+        self:RunLater(player_owner..':disturbing', function()
+            broadcastToColor("DO NOT disturb other player's zones!", player_owner, Color.Red)
+            self:SetPage(player_owner, true)
+        end, true)
+    end
+end
+
+function GW_GAME:RunLater(id, fnc, once)
+    if not self.run_later then self.run_later = {} end
+    if once then id = id..':once' end
+
+    if self.run_later[id] and not once then
+        table.insert(self.run_later[id], fnc)
+        return
+    end
+
+    self.run_later[id] = {fnc}
+
+    Wait.frames(function()
+        if not self.run_later[id] then return end
+        for _, f in ipairs(self.run_later[id]) do
+            f()
+        end
+        self.run_later[id] = nil
+    end, 30)
 end
 
 function GW_GAME:GetPlyZone(ply)
@@ -632,6 +678,7 @@ function GW_GAME:SetPage(ply, idx)
     if idx == data.page then return end
 
     if not idx then idx = data.page + 1 end
+    if idx == true then idx = data.page end
 
     local page_len = #data.grid
     local ordered = data.cards_ordered
@@ -684,6 +731,7 @@ function GW_GAME:SetPage(ply, idx)
 
                 local obj = self:DuplicateCard(card, pos, r)
                 obj.setLock(false)
+                obj.addTag('gridZone')
                 obj.addTag(self:PlyTag(ply, 'gridZone'))
             end
             data.page = idx
@@ -822,6 +870,9 @@ function onLoad(state)
     end
 end
 
+
+-- BUTTONS
+
 function onClickStartGame()
     GW_GAME:InitGame()
     local start_btn = getObjectFromGUID(GUID_START_BUTTON)
@@ -843,8 +894,12 @@ function onClickPickDone()
     end
 end
 
+
+-- EVENTS
+
 function onBlindfold()
-    if not GW_GAME.data.init_done then return end
+    if not GW_GAME.data.init_done    then return end
+    if     GW_GAME.data.game_started then return end
 
     local tbl = {}
     for _, p in ipairs(Player.getPlayers()) do
@@ -854,15 +909,16 @@ function onBlindfold()
 end
 
 function onScriptingButtonUp(index, color)
-    if not GW_GAME.data.init_done then return end
+    if not GW_GAME.data.game_started then return end
     GW_GAME:SetPage(color, index < 10 and index or nil)
 end
 
 function onPlayerAction(player, action, targets)
-    if not GW_GAME.data.init_done then return end
+    if not GW_GAME.data.game_started then return end
     if action == Player.Action.FlipOver
         or action == Player.Action.FlipIncrementalLeft
         or action == Player.Action.FlipIncrementalRight
+        or action == Player.Action.PickUp
     then
         local res = true
         for _, obj in ipairs(targets) do
@@ -871,6 +927,7 @@ function onPlayerAction(player, action, targets)
                 res = false
                 broadcastToColor("DO NOT touch other player's cards!", player.color, Color.Red)
                 break
+
             elseif action == Player.Action.FlipOver and can_he == true then
                 GW_GAME:OnPlayerFlippedObj(player.color, obj, true)
             end
@@ -882,11 +939,17 @@ function onPlayerAction(player, action, targets)
 end
 
 function onObjectDrop(player, obj)
-    if not GW_GAME.data.init_done then return end
+    if not GW_GAME.data.game_started then return end
     if GW_GAME:CanPlayerFlip(player, obj) then
         GW_GAME:OnPlayerFlippedObj(player, obj, false)
     end
 end
 
+function onObjectEnterZone(zone, object)
+    GW_GAME:CheckZoneEnterance(zone, object)
+end
+
+
+-- OTHER
 
 function none() end
