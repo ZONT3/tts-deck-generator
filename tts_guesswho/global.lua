@@ -807,10 +807,12 @@ function onBlindfold()
 end
 
 function onScriptingButtonUp(index, color)
+    if not GW_GAME.data.init_done then return end
     GW_GAME:SetPage(color, index < 10 and index or nil)
 end
 
 function onPlayerAction(player, action, targets)
+    if not GW_GAME.data.init_done then return end
     if action == Player.Action.FlipOver
         or action == Player.Action.FlipIncrementalLeft
         or action == Player.Action.FlipIncrementalRight
@@ -833,6 +835,7 @@ function onPlayerAction(player, action, targets)
 end
 
 function onObjectDrop(player, obj)
+    if not GW_GAME.data.init_done then return end
     if GW_GAME:CanPlayerFlip(player, obj) then
         GW_GAME:OnPlayerFlippedObj(player, obj, false)
     end
