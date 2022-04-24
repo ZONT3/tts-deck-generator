@@ -62,11 +62,19 @@ end
 
 function FlipKV(tbl, fill_instead)
     local tmp = {}
+    local i = 1
     for k, v in pairs(tbl) do
-        if fill_instead ~= nil then
-            tmp[v] = fill_instead
-        else
-            tmp[v] = k
+        if not not v then
+            if v == true then
+                v = i
+                i = i + 1
+            end
+
+            if fill_instead ~= nil then
+                tmp[v] = fill_instead
+            else
+                tmp[v] = k
+            end
         end
     end
     return tmp
@@ -83,12 +91,16 @@ function split(str, sep)
     return t
 end
 
+function trim(s)
+    return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
 function propertiesToTable(str)
-    local lines = split(str, '%n;')
+    local lines = split(str, '\n;')
     local tbl = {}
     for _, line in ipairs(lines) do
         local kv = split(line, ':')
-        tbl[kv[1]] = kv[2] or true
+        tbl[kv[1]] = kv[2] and trim(kv[2]) or true
     end
     return tbl
 end
@@ -111,12 +123,34 @@ function Card(inf, deck, deck_hand)
         meta.name = inf.name
         meta.guid = inf.guid
         meta.guid_hand = inf.guid_hand
+
+        meta.properties['name'] = meta.name
     end
 
-    function meta:GetData()
+    function meta:WriteProperties()
+        self:Operate(function (obj, hand)
+            local str = ''
+            for k, v in pairs(self.properties) do
+                str = str..(#str > 0 and '\n' or '')..k..': '..v
+            end
+            obj.setDescription(str)
+            hand.setDescription(str)
+        end)
+    end
+
+    function meta:GetName()
+        return self.properties['name'] or self.name
+    end
+
+    function meta:SetName(name)
+        self.properties['name'] = name
+        self:WriteProperties()
+    end
+
+    function meta:GetJSON()
         if not self.data then
             self.data, self.data_hand = self:Operate(function(obj, hand)
-                return obj.getData(), hand.getData()
+                return obj.getJSON(), hand.getJSON()
             end)
         end
         return self.data, self.data_hand
@@ -201,6 +235,8 @@ function GW_GAME:InitGame(config)
     self:InitZones()
 
     UI.show('pickTip')
+    UI.show('pickCounter')
+    UI.setValue("pickCounter", string.format("Players picked:<br/><b>0 / %d</b>", #Player.getPlayers()))
 
     self.data.init_done = true
 end
@@ -236,12 +272,14 @@ function GW_GAME:StartGame(randomize)
     self.data.stage = STAGE_PLAY
 
     self:HidePickUI()
+    UI.hide("pickCounter")
+    UI.hide('pickTip')
 
     local cards = self:GetCardList()
     for _, p in ipairs(Player.getPlayers()) do
-        local name = self.data.prepared_players[self.data.picking_player]
+        local name = self.data.prepared_players[p.color]
         if not name and randomize then
-            name = cards[math.random(#cards)]
+            name = cards[math.random(#cards)]:GetName()
         end
 
         if name then
@@ -250,7 +288,7 @@ function GW_GAME:StartGame(randomize)
             for _, pp in ipairs(Player.getPlayers()) do
                 if p.color ~= pp.color then
                     local obj = self:DuplicateHandCard(self:FindCard(name, cards))
-                    obj.setName('['..Color.fromString(p.color):toHex(false)..']'..name)
+                    obj.setName('['..Color.fromString(p.color):toHex(false)..']'..obj.getName())
                     obj.setDescription(p.steam_name.."'s guess target\n\n"..obj.getDescription())
                     obj.deal(1, pp.color)
                 end
@@ -299,6 +337,17 @@ end
 function GW_GAME:PlayerBlindfoldChanged(states)
     if self.data.stage ~= STAGE_PICKING then return end
 
+    local total = 0
+    local picked = 0
+    for _, ply in ipairs(Player.getPlayers()) do
+        total = total + 1
+        if self.data.prepared_players[ply.color] then
+            picked = picked + 1
+        end
+    end
+    UI.setValue("pickCounter", string.format("Players picked:<br/><b>%d / %d</b>", picked, total))
+    local all_picked = picked >= total
+
     if self.data.picking_player and not states[self.data.picking_player] then
         -- player stopped being picking one
         local result = self.data.prepared_players[self.data.picking_player]
@@ -329,17 +378,8 @@ function GW_GAME:PlayerBlindfoldChanged(states)
         broadcastToAll("Now picking for: "..self.data.picking_player, self.data.picking_player)
     else
         -- no one is picking
-        local all_picked = true
-        for _, ply in ipairs(Player.getPlayers()) do
-            if not self.data.prepared_players[ply.color] then
-                all_picked = false
-                break
-            end
-        end
-
-        if all_picked then
-            self:HidePickUI()
-        else
+        self:HidePickUI()
+        if not all_picked then
             UI.show('pickTip')
         end
     end
@@ -347,27 +387,46 @@ end
 
 function GW_GAME:OnPickCard(deck, obj)
     if not self.data.picked_now then self.data.picked_now = {} end
-    table.insert(self.data.picked_now, obj.getGUID())
+    table.insert(self.data.picked_now, {guid = obj.getGUID(), name = self:GetCardName(obj)})
+end
+
+function GW_GAME:GetCardName(obj)
+    local prop = propertiesToTable(obj.getDescription())
+    return prop['name'] or obj.getName()
 end
 
 function GW_GAME:UpdPickDeck()
+    local deck = getObjectFromGUID(self.data.pick_deck_guid)
+    if not deck and (not self.data.picked_now or #self.data.picked_now == 0) then return end
+    
     Wait.frames(function ()
         local objs = self.data.picked_now
+        local names = {}
+
+        for _, d in ipairs(self.data.picked_now) do
+            names[d.name] = true
+        end
+        names = FlipKV(names)
+
         if self.data.picking_player and #objs > 0 then
-            local result = getObjectFromGUID(objs[math.random(#objs)]).getName()
+            local result = names[math.random(#names)]
 
             self.data.prepared_players[self.data.picking_player] = result
 
             log(self.data.picking_player..': '..result)
             for _, ply in ipairs(Player.getPlayers()) do
                 if ply.color ~= self.data.picking_player then
-                    ply.broadcast("Now selected: "..(result or 'NONE'), Color.fromString(self.data.picking_player))
+                    ply.broadcast("Selected: "..(result or 'NONE'), Color.fromString(self.data.picking_player))
                 end
             end
         end
 
-        for _, guid in ipairs(objs) do
-            getObjectFromGUID(self.data.pick_deck_guid).putObject(getObjectFromGUID(guid))
+        self.data.picked_now = {}
+        for _, d in ipairs(objs) do
+            local obj = getObjectFromGUID(d.guid)
+            if obj then
+                deck.putObject(obj)
+            end
         end
     end)
 end
@@ -378,15 +437,33 @@ function GW_GAME:ShowPickUI(picking_player)
         return
     end
 
-    if getObjectFromGUID(self.data.pick_deck_guid) then return end
+    local deck = self.data.pick_deck_guid and getObjectFromGUID(self.data.pick_deck_guid)
+    if deck then
+        deck.UI.setValue('name', string.format('Now picking for:<br/><textcolor color="#%s"><b>%s</b></textcolor>',
+            Color.fromString(picking_player):toHex(), self:GetPlyName(picking_player)))
+        return
+    end
 
-    local deck = spawnObjectJSON({
+    deck = spawnObjectJSON({
         position = {0, self.data.game_height, 0},
+        rotation = {0, 0, 180},
         json = self.data.hand_deck_json
     })
+
     deck.setLock(false)
+    deck.UI.setXml(string.format('<Text position="0 250 0" rotation="0 180 180" fontSize="36" outline="#202020" color="#FFFFFF">'..
+                   'Use "Search" context action (RMB)<br/>and drag onto table desired card!</Text>'..
+                   '<Text id="name" position="0 -250 0" rotation="0 180 180" fontSize="36" outline="#202020" color="#FFFFFF">'..
+                   'Now picking for:<br/><textcolor color="#%s"><b>%s</b></textcolor></Text>', Color.fromString(picking_player):toHex(), self:GetPlyName(picking_player)))
 
     self.data.pick_deck_guid = deck.getGUID()
+end
+
+function GW_GAME:GetPlyName(ply)
+    ply = self:GetPlyInst(ply)
+    if ply then
+        return ply.steam_name
+    end
 end
 
 function GW_GAME:HidePickUI()
@@ -404,12 +481,12 @@ function GW_GAME:SpawnControlDesk(player)
 
     local desk = getObjectFromGUID(GUID_OPERATING_TABLE)
     local cdesk = self:DuplicateObj(
-        desk.getData(),
+        desk.getJSON(),
         {pos.x, CONTROL_TABLE_ELEVATION, pos.z},
         {0, -r.y, 0}, {scale = {0.85,1,1}})
 
     cdesk.UI.setXml(desk.UI.getXml())
-    -- print(desk.UI.getXml())
+
     return cdesk
 end
 
@@ -570,25 +647,20 @@ function GW_GAME:OnPlayerFlippedObj(ply, obj, invert)
         state = not state
     end
 
-    data.card_states[obj.getName()] = state
+    data.card_states[self:GetCardName(obj)] = state
 end
 
 function GW_GAME:FixNameCollisions(card_list)
     local names_set = {}
     local count = 0
     for _, card in ipairs(card_list) do
-        local val = names_set[card.name]
+        local val = names_set[card:GetName()]
         if val then
-            local old_name = card.name
+            local old_name = card:GetName()
 
             if type(val) ~= "number" then
                 local new_name = old_name .. ' (1)'
-                val.name = new_name
-
-                val:Operate(function (obj, hand)
-                    obj.setName(new_name)
-                    hand.setName(new_name)
-                end)
+                val:SetName(new_name)
 
                 val = 1
             end
@@ -596,16 +668,12 @@ function GW_GAME:FixNameCollisions(card_list)
             val = val + 1
 
             local new_name = old_name .. ' (' .. val .. ')'
-            card.name = new_name
-            card:Operate(function (obj, hand)
-                obj.setName(new_name)
-                hand.setName(new_name)
-            end)
+            card:SetName(new_name)
 
             names_set[old_name] = val
             count = count + 1
         else
-            names_set[card.name] = card
+            names_set[card:GetName()] = card
         end
     end
 
@@ -621,15 +689,18 @@ end
 function GW_GAME:InitCardStates()
     local res = {}
     for _, card in ipairs(self:GetCardList()) do
-        res[card.name] = false
+        res[card:GetName()] = false
     end
     return res
 end
 
 function GW_GAME:FindCard(name, list)
     for _, card in ipairs(list or self:GetCardList()) do
-        if card.name == name then
+        if card:GetName() == name then
             return card
+        end
+        if name == "Shiratsuyu" then
+            print("NOT: "..card:GetName())
         end
     end
 end
@@ -646,9 +717,47 @@ function GW_GAME:InitCards()
 
     self:FixNameCollisions(card_list)
 
+    local data_grid = {}
+    local data_hand = {}
+
     for _, card in ipairs(card_list) do
-        card:GetData()
+        local g, h = card:GetJSON()
+        table.insert(data_grid, g)
+        table.insert(data_hand, h)
     end
+
+    local pos_g1 = POS_OPERATING_TABLE - Vector(10, 0, -10)
+    local pos_g2 = POS_OPERATING_TABLE - Vector(10, 0, -20)
+    local pos_h1 = POS_OPERATING_TABLE - Vector(-10, 0, -10)
+    local pos_h2 = POS_OPERATING_TABLE - Vector(-10, 0, -20)
+
+    local deck_g
+    local deck_h
+
+    for i, grid in ipairs(data_grid) do
+        local hand = data_hand[i]
+
+        local g = self:DuplicateObj(grid, i == 1 and pos_g1 or pos_g2)
+        local h = self:DuplicateObj(hand, i == 1 and pos_h1 or pos_h2)
+        g.setLock(false)
+        h.setLock(false)
+
+        if i == 1 then
+            deck_g = g
+            deck_h = h
+        else
+            deck_g = deck_g.putObject(g)
+            deck_h = deck_h.putObject(h)
+            deck_g.setPosition(pos_g1)
+            deck_h.setPosition(pos_h1)
+        end
+    end
+
+    self.data.grid_deck_json = deck_g.getJSON()
+    self.data.hand_deck_json = deck_h.getJSON()
+
+    destroyObject(deck_g)
+    destroyObject(deck_h)
     
     self.data.cards_cache = self:GenerateCardsCache(card_list)
 end
@@ -659,7 +768,6 @@ function GW_GAME:InitDecks()
         ['hand'] = GUID_HAND_DECK_ZONE
     }) do
         local field = name .. '_deck'
-        local field_data = name .. '_deck_json'
         if not self[field] then
             local deck = nil
             for _, obj in ipairs(getObjectFromGUID(guid).getObjects()) do
@@ -675,7 +783,6 @@ function GW_GAME:InitDecks()
                 self[field] = deck.getGUID()
             end
         end
-        self.data[field_data] = getObjectFromGUID(self[field]).getJSON()
     end
 end
 
@@ -830,18 +937,18 @@ function GW_GAME:DuplicateObj(data, pos, r, rest)
     local tbl = {
         position = pos or POS_OPERATING_TABLE,
         rotation = r or {0, 0, 0},
-        data = data,
+        json = data,
     }
     TblAdd(tbl, rest)
-    return spawnObjectData(tbl)
+    return spawnObjectJSON(tbl)
 end
 
 function GW_GAME:DuplicateCard(card, pos, r)
-    return self:DuplicateObj(select(1, card:GetData()), pos, r)
+    return self:DuplicateObj(select(1, card:GetJSON()), pos, r)
 end
 
 function GW_GAME:DuplicateHandCard(card, pos, r)
-    return self:DuplicateObj(select(2, card:GetData()), pos, r)
+    return self:DuplicateObj(select(2, card:GetJSON()), pos, r)
 end
 
 function GW_GAME:OnCardLeft(obj)

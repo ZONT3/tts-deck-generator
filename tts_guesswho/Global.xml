@@ -2,7 +2,7 @@
     <Button active="false"/>
     <Button class="init" active="true"/>
     <Button class="start" 
-        visibility="Host"
+        visibility="Admin"
         width="200"
         height="60"
         rectAlignment="LowerCenter"
@@ -35,6 +35,9 @@
     alignment="UpperCenter"
     offsetXY="0 -200"
 >Use blindfold for allowing others<br/>to pick your guessing target!<br/><textsize size="18"><i><b>B</b> by default</i></textsize></Text>
+<Text id="pickCounter"
+    alignment="UpperRight"
+    offsetXY="-320 -200" />
 
 
 <!-- 
