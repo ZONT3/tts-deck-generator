@@ -200,6 +200,8 @@ function GW_GAME:InitGame(config)
     self.data.game_height = math.max(GAME_ZONE_TL.y, GAME_ZONE_BR.y)
     self:InitZones()
 
+    UI.show('pickTip')
+
     self.data.init_done = true
 end
 
@@ -230,24 +232,28 @@ function GW_GAME:InitPlayer(player, card_name)
     self.data.players[player] = data
 end
 
-function GW_GAME:StartGame()
+function GW_GAME:StartGame(randomize)
     self.data.stage = STAGE_PLAY
-    -- for p, name in pairs(self.data.prepared_players) do
-    --     self:InitPlayer(p, name)
-    --     self:SetPage(p, 1)
-    -- end
-    -- TEMP JUMPER
+
+    self:HidePickUI()
+
     local cards = self:GetCardList()
     for _, p in ipairs(Player.getPlayers()) do
-        local card = cards[math.random(#cards)]
-        self:InitPlayer(p.color, card.name)
-        self:SetPage(p.color, 1)
-        for _, pp in ipairs(Player.getPlayers()) do
-            if p.color ~= pp.color then
-                local obj = self:DuplicateHandCard(card)
-                obj.setName('['..Color.fromString(p.color):toHex(false)..']'..card.name)
-                obj.setDescription(p.steam_name.."'s guess target\n\n"..obj.getDescription())
-                obj.deal(1, pp.color)
+        local name = self.data.prepared_players[self.data.picking_player]
+        if not name and randomize then
+            name = cards[math.random(#cards)]
+        end
+
+        if name then
+            self:InitPlayer(p.color, name)
+            self:SetPage(p.color, 1)
+            for _, pp in ipairs(Player.getPlayers()) do
+                if p.color ~= pp.color then
+                    local obj = self:DuplicateHandCard(self:FindCard(name, cards))
+                    obj.setName('['..Color.fromString(p.color):toHex(false)..']'..name)
+                    obj.setDescription(p.steam_name.."'s guess target\n\n"..obj.getDescription())
+                    obj.deal(1, pp.color)
+                end
             end
         end
     end
@@ -295,8 +301,12 @@ function GW_GAME:PlayerBlindfoldChanged(states)
 
     if self.data.picking_player and not states[self.data.picking_player] then
         -- player stopped being picking one
-        -- TODO hide picking ui
-        print(self.data.picking_player .. ": " .. self.data.prepared_players[self.data.picking_player])
+        local result = self.data.prepared_players[self.data.picking_player]
+        for _, ply in ipairs(Player.getPlayers()) do
+            if ply.color ~= self.data.picking_player then
+                ply.broadcast(self.data.picking_player.." Pick results: "..(result or 'NONE'), Color.fromString(self.data.picking_player))
+            end
+        end
         self.data.picking_player = nil
 
     elseif self.data.picking_player then
@@ -314,12 +324,76 @@ function GW_GAME:PlayerBlindfoldChanged(states)
 
     if self.data.picking_player then
         -- found new picker
-        -- TODO show picking ui
-        local cards = self:GetCardList()
-        self.data.prepared_players[self.data.picking_player] = cards[math.random(#cards)].name
+        UI.hide('pickTip')
+        self:ShowPickUI(self.data.picking_player)
+        broadcastToAll("Now picking for: "..self.data.picking_player, self.data.picking_player)
+    else
+        -- no one is picking
+        local all_picked = true
+        for _, ply in ipairs(Player.getPlayers()) do
+            if not self.data.prepared_players[ply.color] then
+                all_picked = false
+                break
+            end
+        end
+
+        if all_picked then
+            self:HidePickUI()
+        else
+            UI.show('pickTip')
+        end
+    end
+end
+
+function GW_GAME:OnPickCard(deck, obj)
+    if not self.data.picked_now then self.data.picked_now = {} end
+    table.insert(self.data.picked_now, obj.getGUID())
+end
+
+function GW_GAME:UpdPickDeck()
+    Wait.frames(function ()
+        local objs = self.data.picked_now
+        if self.data.picking_player and #objs > 0 then
+            local result = getObjectFromGUID(objs[math.random(#objs)]).getName()
+
+            self.data.prepared_players[self.data.picking_player] = result
+
+            log(self.data.picking_player..': '..result)
+            for _, ply in ipairs(Player.getPlayers()) do
+                if ply.color ~= self.data.picking_player then
+                    ply.broadcast("Now selected: "..(result or 'NONE'), Color.fromString(self.data.picking_player))
+                end
+            end
+        end
+
+        for _, guid in ipairs(objs) do
+            getObjectFromGUID(self.data.pick_deck_guid).putObject(getObjectFromGUID(guid))
+        end
+    end)
+end
+
+function GW_GAME:ShowPickUI(picking_player)
+    if not self.data.hand_deck_json then
+        print('ERROR: Cannot find pick deck.')
+        return
     end
 
-    -- else no one is picking
+    if getObjectFromGUID(self.data.pick_deck_guid) then return end
+
+    local deck = spawnObjectJSON({
+        position = {0, self.data.game_height, 0},
+        json = self.data.hand_deck_json
+    })
+    deck.setLock(false)
+
+    self.data.pick_deck_guid = deck.getGUID()
+end
+
+function GW_GAME:HidePickUI()
+    local deck = getObjectFromGUID(self.data.pick_deck_guid)
+    if deck then
+        destroyObject(deck)
+    end
 end
 
 function GW_GAME:SpawnControlDesk(player)
@@ -585,6 +659,7 @@ function GW_GAME:InitDecks()
         ['hand'] = GUID_HAND_DECK_ZONE
     }) do
         local field = name .. '_deck'
+        local field_data = name .. '_deck_json'
         if not self[field] then
             local deck = nil
             for _, obj in ipairs(getObjectFromGUID(guid).getObjects()) do
@@ -600,6 +675,7 @@ function GW_GAME:InitDecks()
                 self[field] = deck.getGUID()
             end
         end
+        self.data[field_data] = getObjectFromGUID(self[field]).getJSON()
     end
 end
 
@@ -843,6 +919,45 @@ function GW_GAME:GenerateGridPoints(p_tl, p_br, w, h)
 end
 
 
+-- UI Functions
+function getDefaults(data)
+    return getByTag(data, 'Defaults')[1]
+end
+
+function getByTag(data, tag, recursive)
+    local res = {}
+
+    for _, node in ipairs(data) do
+        local add = recursive ~= false and node.children and getByTag(node.children, tag) or {}
+        if node.tag == tag then
+            table.insert(add, node)
+        end
+        for _, n in ipairs(add) do
+            table.insert(res, n)
+        end
+    end
+
+    return res
+end
+
+function getById(data, id, recursive)
+    for _, node in ipairs(data) do
+        if node.id == id then
+            return node
+        end
+
+        if recursive ~= false and node.children then
+            local res = getById(node.children, id)
+            if res then
+                return res
+            end
+        end
+    end
+end
+
+
+-- Load/Save
+
 function onSave()
     -- if GW_GAME.data.init_done then
     --     GW_GAME.data.objects = {}
@@ -880,6 +995,11 @@ function onClickPickDone()
     UI.hide('pickDone')
 end
 
+function onClickPickDoneRand()
+    GW_GAME:StartGame(true)
+    UI.hide('pickDone')
+end
+
 
 -- EVENTS
 
@@ -900,7 +1020,14 @@ function onScriptingButtonUp(index, color)
 end
 
 function onPlayerAction(player, action, targets)
+    for _, obj in ipairs(targets) do
+        if obj.getGUID() == GW_GAME.data.pick_deck_guid and action ~= Player.Action.Select then
+            return false
+        end
+    end
+
     if not GW_GAME.data.game_started then return end
+
     if action == Player.Action.FlipOver
         or action == Player.Action.FlipIncrementalLeft
         or action == Player.Action.FlipIncrementalRight
@@ -925,6 +1052,7 @@ function onPlayerAction(player, action, targets)
 end
 
 function onObjectDrop(player, obj)
+    updPickDeck()
     if not GW_GAME.data.game_started then return end
     if GW_GAME:CanPlayerFlip(player, obj) then
         GW_GAME:OnPlayerFlippedObj(player, obj, false)
@@ -935,6 +1063,27 @@ function onObjectEnterZone(zone, object)
     if not GW_GAME.data.game_started then return end
     GW_GAME:CheckZoneEnterance(zone, object)
 end
+
+function onObjectLeaveContainer(container, object)
+    if not GW_GAME.data.init_done    then return end
+    if     GW_GAME.data.game_started then return end
+
+    if container.getGUID() == GW_GAME.data.pick_deck_guid then
+        GW_GAME:OnPickCard(container, object)
+    end
+end
+
+function updPickDeck()
+    if not GW_GAME.data.init_done    then return end
+    if     GW_GAME.data.game_started then return end
+    GW_GAME:UpdPickDeck()
+end
+
+function onObjectSearchEnd()
+    updPickDeck()
+end
+
+
 
 
 -- OTHER

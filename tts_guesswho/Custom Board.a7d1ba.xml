@@ -1,5 +1,5 @@
 <Defaults>
-    <Panel active="false"
+    <Panel active="true"
         ignoreLayout="true" />
     <Text 
         color="#F0F0F0"
@@ -11,10 +11,12 @@
 
 <Panel id="main"
     position="0 0 -60"
-    rotation="0 0 180">
-    <Text offsetXY="820 0">|</Text>
-    <Text offsetXY="-820 0">|</Text>
-    <Text offsetXY="0 -800">------</Text>
-    <Text offsetXY="0 790" class="tip"
+    rotation="0 0 180"
+    width="1600"
+    height="1600">
+    <Text alignment="middleLeft">|</Text>
+    <Text alignment="middleRight">|</Text>
+    <Text alignment="lowerCenter">------</Text>
+    <Text alignment="upperCenter" class="tip"
     ><i><b>TIP:</b> You can use custom keys (numpad by default) for selecting pages 1-9</i></Text>
 </Panel>

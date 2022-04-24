@@ -11,10 +11,31 @@
         textColor="#F0F0F0"
         fontStyle="Bold"
         fontSize="24" />
+    <Button class="small"
+        height="20"
+        fontSize="14"
+        />
+    <Text active="false"
+        fontSize="24"
+        color="#FFFFFF"/>
 </Defaults>
 
 <Button id="startGame" class="start init" onclick="onClickStartGame">Start Picking</Button>
-<Button id="pickDone" class="start" onclick="onClickPickDone">Start Game</Button>
+<Panel id="pickDone" active="false"
+    rectAlignment="LowerCenter"
+    offsetXY="0 20"
+    width="200"
+    height="110">
+    <Button class="start init" onclick="onClickPickDone" offsetXY="0 0">Start Game</Button>
+    <Button class="start small init" onclick="onClickPickDoneRand" offsetXY="0 65">Randomize unpicked</Button>
+    <Button class="start small init" onclick="onClickPickDoneRand" interactable="false" offsetXY="0 90">Randomize all</Button>
+</Panel>
+
+<Text id="pickTip"
+    alignment="UpperCenter"
+    offsetXY="0 -200"
+>Use blindfold for allowing others<br/>to pick your guessing target!<br/><textsize size="18"><i><b>B</b> by default</i></textsize></Text>
+
 
 <!-- 
 button_normal             #282828
