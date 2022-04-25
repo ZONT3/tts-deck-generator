@@ -123,7 +123,10 @@ class SaveProcessor:
             for i, inf in enumerate(cards_info):
                 obj = json.loads(self.reference_contained_object)
                 for k, v in inf.items():
-                    obj[k] = v
+                    if k == 'Properties':
+                        obj['Description'] = '\n'.join(map(lambda x: f'{x[0]}: {x[1]}', v.items()))
+                    else:
+                        obj[k] = v
 
                 card_id = deck_ids[start + i]
                 obj['CardID'] = card_id

@@ -317,4 +317,28 @@ def _create_sheet(leftover, width, max_height, card_size, background_color=(255,
 
 def load_cards_info(directory, prefix):
     with open(os.path.join(directory, f'{prefix}_cards_info.json')) as fp:
-        return json.load(fp)
+        res = json.load(fp)
+    return res
+
+
+def get_from_sheets(sheets: List[DeckSheet], idx: int):
+    prev = 0
+    i = 0
+    for sheet in sheets:
+        i += sheet.size[2]
+        if idx < i:
+            break
+        prev = i
+    else:
+        raise IndexError(f'Index out of range')
+
+    sheet_img = Image.open(sheet.face_path).convert('RGBA')
+
+    idx -= prev
+    card_size = (sheet_img.size[0] // sheet.size[0], sheet_img.size[1] // sheet.size[1])
+    x = idx % sheet.size[0]
+    y = idx // sheet.size[0]
+
+    x *= card_size[0]
+    y *= card_size[1]
+    return sheet_img.crop((x, y, x + card_size[0], y + card_size[1]))

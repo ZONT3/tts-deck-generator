@@ -11,6 +11,7 @@ from tqdm import tqdm
 import tts_deckgen.image_processing as ip
 import tts_deckgen.save_processing as sp
 from tts_deckgen.deck import Deck, DEFAULT_STAMP_IMAGE, DeckSheet, load_cards_info
+from tts_deckgen.properties_editor import edit_properties, write_changes
 from tts_deckgen.save_processing import SaveProcessor
 
 
@@ -106,20 +107,22 @@ def load(deck_dir, prefix):
 def main():
     p = ArgumentParser()
     p.add_argument('-d', '--pics-dir', type=str, default=None, help='Directory to grab pictures from')
-    p.add_argument('-D', '--deck-dir', type=str, default=None, help='Directory to load deck from. '
-                                                                    'Must be output dir of run '
-                                                                    'with -d option')
-    p.add_argument('-u', '--insert-url', action='store_true', help='Enter interactive mode for changing files local '
-                                                                   'dirs to URLs. Output dir will be used to iterate'
-                                                                   'over files.'
-                                                                   '--game-save must be set')
+    p.add_argument('-D', '--deck-dir', type=str, default=None,
+                   help='Directory to load deck from. Must be output dir of run with -d option')
+    p.add_argument('-u', '--insert-url', action='store_true',
+                   help='Enter interactive mode for changing files local dirs to URLs. '
+                        'Output dir will be used to iterate over files. --game-save must be set')
+    p.add_argument('-P', '--properties', action='store_true',
+                   help='Enter properties editor mode. Allows you to interactively edit card\'s properties.'
+                        'Saved deck must be set. Game save and guid are optional. (-D, -s, -g options respectively).')
     p.add_argument('--fix', action='store_true', help='Restores save (-s option) to untouched state')
 
     p.add_argument('-o', '--output', type=str, default='output', help='Output dir')
     p.add_argument('-R', '--no-rejected', action='store_true', help='Do not generate "Rejected" as back')
 
-    p.add_argument('-p', '--prefix', type=str, default='grid', help='Deck prefix for -D option. Can be "grid" or '
-                                                                    '"clean", or any custom')
+    p.add_argument('-p', '--prefix', type=str, default='grid,clean',
+                   help='Deck prefix for -D or -P option. Can be "grid" or "clean", or any custom. '
+                        'Can be comma-separated list (for -P mode only).')
 
     p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
     p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save')
@@ -173,15 +176,26 @@ def main():
     if args.deck_dir:
         if not os.path.isdir(args.deck_dir):
             raise AssertionError('--deck-dir does not represent a dir')
-        if not args.game_save:
+        if not args.game_save and not args.properties:
             raise AssertionError('--game-save not set')
-        if not args.guid:
+        if not args.guid and args.game_save:
             raise AssertionError('--guid not set')
 
-        deck = load(args.deck_dir, args.prefix)
-        p = SaveProcessor(args.game_save)
-        p.set_object(args.guid, append_content=args.append)
-        p.write_decks(deck)
+        prefix_list = args.prefix.split(',')
+        deck = load(args.deck_dir, prefix_list[0])
+
+        save = True
+        if args.properties:
+            sheets, cards = deck
+            save, add, rm = edit_properties(sheets, cards)
+            if save:
+                for prefix in prefix_list:
+                    write_changes(os.path.join(args.deck_dir, f'{prefix}_cards_info.json'), cards, add, rm)
+
+        if save and args.game_save:
+            p = SaveProcessor(args.game_save)
+            p.set_object(args.guid, append_content=args.append)
+            p.write_decks(deck)
 
     elif args.pics_dir:
         if not os.path.isdir(args.pics_dir):
