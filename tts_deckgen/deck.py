@@ -321,6 +321,9 @@ def load_cards_info(directory, prefix):
     return res
 
 
+sheets_cache = {}
+
+
 def get_from_sheets(sheets: List[DeckSheet], idx: int):
     prev = 0
     i = 0
@@ -332,7 +335,12 @@ def get_from_sheets(sheets: List[DeckSheet], idx: int):
     else:
         raise IndexError(f'Index out of range')
 
-    sheet_img = Image.open(sheet.face_path).convert('RGBA')
+    path = os.path.abspath(sheet.face_path)
+    if path in sheets_cache:
+        sheet_img = sheets_cache[path]
+    else:
+        sheet_img = Image.open(sheet.face_path).convert('RGBA')
+        sheets_cache[path] = sheet_img
 
     idx -= prev
     card_size = (sheet_img.size[0] // sheet.size[0], sheet_img.size[1] // sheet.size[1])

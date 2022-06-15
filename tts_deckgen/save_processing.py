@@ -37,7 +37,7 @@ class SaveProcessor:
         self.save_obj = save_obj
         self.save_path = save_path
 
-        self.save_props = { }
+        self.save_props = {}
         self.referenced = False
         self.reference_custom_deck = None
         self.reference_contained_object = None
@@ -124,7 +124,9 @@ class SaveProcessor:
                 obj = json.loads(self.reference_contained_object)
                 for k, v in inf.items():
                     if k == 'Properties':
-                        obj['Description'] = '\n'.join(map(lambda x: f'{x[0]}: {x[1]}', v.items()))
+                        obj['Description'] = '\n'.join(
+                            map(lambda x: f'{x[0]}: {x[1]}' if x[1] != "true" else f'{x[0]}',
+                                filter(lambda x: x[1] != "false", v.items())))
                     else:
                         obj[k] = v
 

@@ -193,9 +193,13 @@ def main():
                     write_changes(os.path.join(args.deck_dir, f'{prefix}_cards_info.json'), cards, add, rm)
 
         if save and args.game_save:
-            p = SaveProcessor(args.game_save)
-            p.set_object(args.guid, append_content=args.append)
-            p.write_decks(deck)
+            guids = args.guid.split(',')
+            for i, guid in enumerate(guids):
+                if len(guids) == len(prefix_list) and i > 0:
+                    deck = load(args.deck_dir, prefix_list[i])
+                p = SaveProcessor(args.game_save)
+                p.set_object(guid, append_content=args.append)
+                p.write_decks(deck)
 
     elif args.pics_dir:
         if not os.path.isdir(args.pics_dir):

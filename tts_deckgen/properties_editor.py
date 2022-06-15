@@ -1,6 +1,7 @@
 import json
 import re
 import sys
+import traceback
 from typing import List, Dict
 
 from tts_deckgen.deck import DeckSheet, get_from_sheets
@@ -138,6 +139,8 @@ class Editor:
             for k, v in enumerate(cards)}
 
         self.buffer = {}
+        self.prev_set = None
+        self.prev_set_v = None
         self.prev_search = None
         self.prev_search_val = None
         self.prev_move = 'next'
@@ -229,7 +232,7 @@ class Editor:
         def pd(curr):
             props = self.get_props(curr)
             return (not skip_blocks or self.get_name(curr) != name) and \
-                   command_input in props and True if len(val) == 0 else val == props[command_input]
+                   command_input in props and (True if len(val) == 0 else val == props[command_input])
 
         found = self.find(pd, self.curr)
         if found == self.curr:
@@ -304,10 +307,22 @@ class Editor:
             self.print_curr()
 
         elif command in ['set', 's']:
-            if len(command_input) > 0 and _check_prop(command_input):
-                val = input('value (empty == true): ').strip()
-                self.set_p(command_input, val)
+            if _check_prop(command_input):
+                if len(command_input) == 0 and self.prev_set is not None:
+                    command_input = self.prev_set
+                    val = self.prev_set_v if self.prev_set_v is not None else ''
+                else:
+                    val = input('value (empty == true): ').strip()
+                
+                if len(command_input) == 0:
+                    return
+                    
                 self.print_total(command_input)
+                self.set_p(command_input, val)
+                self.prev_set = command_input
+                self.prev_set_v = val
+                
+                self.print_curr()
 
         elif command in ['del', 'd', 'rm']:
             if len(command_input) > 0 and _check_prop(command_input):
@@ -404,7 +419,7 @@ def edit_properties(sheets: List[DeckSheet], cards: List[dict]):
             print_help()
         except Exception as e:
             print('ERROR')
-            print(e, file=sys.stderr)
+            print(traceback.format_exc())
 
 
 def write_changes(file, cards, add, rm):
@@ -421,4 +436,4 @@ def write_changes(file, cards, add, rm):
                 cp[k] = v
 
     with open(file, 'w') as fp:
-        json.dump(cards, fp)
+        json.dump(cards, fp, indent=2)

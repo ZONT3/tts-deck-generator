@@ -124,14 +124,20 @@ function Card(inf, deck, deck_hand)
         meta.guid = inf.guid
         meta.guid_hand = inf.guid_hand
 
-        meta.properties['name'] = meta.name
+        meta.properties['uniqueName'] = meta.name
     end
 
     function meta:WriteProperties()
         self:Operate(function (obj, hand)
             local str = ''
             for k, v in pairs(self.properties) do
-                str = str..(#str > 0 and '\n' or '')..k..': '..v
+                if v then
+                    if v == true then
+                        str = str..(#str > 0 and '\n' or '')..k
+                    else
+                        str = str..(#str > 0 and '\n' or '')..k..': '..v
+                    end
+                end
             end
             obj.setDescription(str)
             hand.setDescription(str)
@@ -139,11 +145,11 @@ function Card(inf, deck, deck_hand)
     end
 
     function meta:GetName()
-        return self.properties['name'] or self.name
+        return self.properties['uniqueName'] or self.name
     end
 
     function meta:SetName(name)
-        self.properties['name'] = name
+        self.properties['uniqueName'] = name
         self:WriteProperties()
     end
 
@@ -392,7 +398,7 @@ end
 
 function GW_GAME:GetCardName(obj)
     local prop = propertiesToTable(obj.getDescription())
-    return prop['name'] or obj.getName()
+    return prop['uniqueName'] or obj.getName()
 end
 
 function GW_GAME:UpdPickDeck()
