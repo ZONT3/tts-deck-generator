@@ -499,6 +499,18 @@ end
 function GW_GAME:InitControlDesk(player, num_pages)
     local cdesk = self:GetControlDesk(player)
 
+    self:CDeskInitPages(player, cdesk, num_pages)
+
+    local try = function ()
+        cdesk.UI.show('main')
+        self:CDeskInitFilters(cdesk)
+    end
+    Wait.condition(try, function () return not cdesk.UI.loading end, 15, function()
+        print('ERROR: Cannot load control desk UI')
+    end)
+end
+
+function GW_GAME:CDeskInitPages(player, cdesk, num_pages)
     local max_page = num_pages
     num_pages = num_pages + (ENABLE_ZERO_PAGE and 1 or 0)
 
@@ -559,13 +571,17 @@ function GW_GAME:InitControlDesk(player, num_pages)
         end
         x = x + size + space
     end
+end
 
-    local try = function ()
-        cdesk.UI.show('main')
-    end
-    Wait.condition(try, function () return not cdesk.UI.loading end, 15, function ()
-        print('ERROR: Cannot load control desk UI')
-    end)
+function GW_GAME:CDeskInitFilters(cdesk)
+    -- local btns = {}
+    -- for i = 1, 10, 1 do
+    --     table.insert(btns, createButtonFilter("Test"))
+    -- end
+    -- local cdesk = getObjectFromGUID(GUID_OPERATING_TABLE)
+    -- local ui_xml = cdesk.UI.getXmlTable()
+    -- getById(ui_xml, "category").children = btns
+    -- cdesk.UI.setXmlTable(ui_xml)
 end
 
 function GW_GAME:GetControlDesk(player)
@@ -1055,7 +1071,7 @@ end
 
 function getById(data, id, recursive)
     for _, node in ipairs(data) do
-        if node.id == id then
+        if node.attributes and node.attributes.id == id then
             return node
         end
 
@@ -1066,6 +1082,24 @@ function getById(data, id, recursive)
             end
         end
     end
+end
+
+function createButtonFilter(text, fnc_name)
+    return {
+        tag="Panel",
+        attributes={
+            preferredheight=64,
+        },
+        children={
+            {
+                tag="Button",
+                attributes={
+                    onClick=fnc_name or "none",
+                },
+                value=text or "---",
+            }
+        }
+    }
 end
 
 

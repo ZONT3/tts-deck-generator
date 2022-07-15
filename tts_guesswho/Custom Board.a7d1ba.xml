@@ -1,5 +1,8 @@
 <Defaults>
-    <Panel active="false"
+    <Panel
+        active="true" />
+    <Panel class="main"
+        active="true"
         ignoreLayout="true" />
     <Text 
         color="#F0F0F0"
@@ -9,7 +12,7 @@
         fontSize="14"/>
 </Defaults>
 
-<Panel id="main"
+<Panel id="main" class="main"
     position="0 0 -60"
     rotation="0 0 180"
     width="1600"
@@ -19,4 +22,15 @@
     <Text alignment="lowerCenter">------</Text>
     <Text alignment="upperCenter" class="tip"
     ><i><b>TIP:</b> You can use custom keys (numpad by default) for selecting pages 1-9</i></Text>
+    <VerticalScrollView active="false"
+        width="30%"
+        height="97%"
+        rectAlignment="lowerLeft">
+        <VerticalLayout id="category"
+            childForceExpandHeight="false"
+            childAlignment="UpperCenter">
+            <Panel preferredheight="64"><Button onClick="none">Click Me</Button></Panel>
+            <Panel preferredheight="64"><Button onClick="none">Click Me</Button></Panel>
+        </VerticalLayout>
+    </VerticalScrollView>
 </Panel>
