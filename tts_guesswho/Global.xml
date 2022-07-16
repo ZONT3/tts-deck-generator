@@ -51,6 +51,11 @@
     height="30%"
     rectAlignment="lowerRight"
     offsetXY="-100 10">
+    <Button class="square" id="toggleAll"
+        fontSize="12"
+        width="32"
+        rectAlignment="UpperRight"
+        onClick="onClickToggleAll">All</Button>
     <VerticalScrollView
         width="30%"
         height="95%"

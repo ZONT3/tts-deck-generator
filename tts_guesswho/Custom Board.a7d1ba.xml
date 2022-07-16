@@ -13,7 +13,7 @@
 
 <Panel id="main" class="main"
     position="0 0 -60"
-    rotation="0 0 0"
+    rotation="0 0 180"
     width="1600"
     height="1600">
     <Text alignment="middleLeft">|</Text>

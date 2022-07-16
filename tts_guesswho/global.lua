@@ -127,7 +127,7 @@ function FlipKV(tbl, fill_instead)
     return tmp
 end
 
-function split(str, sep)
+function SplitStr(str, sep)
     if sep == nil then
         sep = "%s"
     end
@@ -138,16 +138,20 @@ function split(str, sep)
     return t
 end
 
-function trim(s)
+function TrimStr(s)
     return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
-function propertiesToTable(str)
-    local lines = split(str, '\n;')
+function StartsWith(str, prefix)
+    return string.sub(str,1,string.len(prefix))==prefix
+ end
+
+function PropertiesToTable(str)
+    local lines = SplitStr(str, '\n;')
     local tbl = {}
     for _, line in ipairs(lines) do
-        local kv = split(line, ':')
-        tbl[kv[1]] = kv[2] and trim(kv[2]) or true
+        local kv = SplitStr(line, ':')
+        tbl[kv[1]] = kv[2] and TrimStr(kv[2]) or true
     end
     return tbl
 end
@@ -166,7 +170,7 @@ function Card(inf, deck, deck_hand)
             meta[k] = v
         end
     else
-        meta.properties = propertiesToTable(inf.description or {})
+        meta.properties = PropertiesToTable(inf.description or {})
         meta.name = inf.name
         meta.guid = inf.guid
         meta.guid_hand = inf.guid_hand
@@ -255,7 +259,7 @@ GW_GAME = {}
 GW_GAME.data = {}
 
 function GW_GAME:InitGame(config)
-    print(' ==== GW Game Init ==== ')
+    log(' ==== GW Game Init ==== ')
     self.data.init_done = false
     self.data.game_started = false
 
@@ -281,17 +285,78 @@ function GW_GAME:InitGame(config)
         if obj then obj.destroyObject() end
     end
 
-    self:InitCards()
 
-    self.data.player_zones = self:GenerateGridZones(GAME_ZONE_TL, GAME_ZONE_BR, GAME_ZONE_W, GAME_ZONE_H, PLAYER_ZONE_MARGIN)
-    self.data.game_height = math.max(GAME_ZONE_TL.y, GAME_ZONE_BR.y)
-    self:InitZones()
+    local card_list = DIAG_Time('LoadCards', function()
+        return self:LoadCards()
+    end)
+    DIAG_Time('FixNameCollisions', function()
+        self:FixNameCollisions(card_list)
+    end)
+    DIAG_Time('InitCards', function()
+        self:InitCards(card_list)
+    end)
+    DIAG_Time('InitFilters', function()
+        self.data.filters, self.data.filter_categories = self:InitFilters(card_list)
+    end)
+    DIAG_Time('GenerateCardsCache', function()
+        self.data.cards_cache = self:GenerateCardsCache(card_list)
+    end)
+
+    DIAG_Time('GenerateGridZones', function()
+        self.data.player_zones = self:GenerateGridZones(GAME_ZONE_TL, GAME_ZONE_BR, GAME_ZONE_W, GAME_ZONE_H, PLAYER_ZONE_MARGIN)
+        self.data.game_height = math.max(GAME_ZONE_TL.y, GAME_ZONE_BR.y)
+    end)
+    DIAG_Time('InitZones', function()
+        self:InitZones()
+    end)
 
     UI.show('pickTip')
     UI.show('pickCounter')
     UI.setValue("pickCounter", string.format("Players picked:<br/><b>0 / %d</b>", #Player.getPlayers()))
 
     self.data.init_done = true
+end
+
+function GW_GAME:StartGame(randomize)
+    self.data.stage = STAGE_PLAY
+
+    self:HidePickUI()
+    UI.hide("pickCounter")
+    UI.hide('pickTip')
+
+    DIAG_Time('InitPlayers', function()
+        self:InitPlayers(randomize)
+    end)
+
+    DIAG_Time('UiInitFilters', function()
+        self:UiInitFilters()
+        UI.show('openFilters')
+    end)
+
+    self.data.game_started = true
+end
+
+function GW_GAME:InitPlayers(randomize)
+    local cards = self:GetCardList()
+    for _, p in ipairs(Player.getPlayers()) do
+        local name = self.data.prepared_players[p.color]
+        if not name and randomize then
+            name = cards[math.random(#cards)]:GetName()
+        end
+
+        if name then
+            self:InitPlayer(p.color, name)
+            self:SetPage(p.color, 1)
+            for _, pp in ipairs(Player.getPlayers()) do
+                if p.color ~= pp.color then
+                    local obj = self:DuplicateHandCard(self:FindCard(name, cards))
+                    obj.setName('['..Color.fromString(p.color):toHex(false)..']'..obj.getName())
+                    obj.setDescription(p.steam_name.."'s guess target\n\n"..obj.getDescription())
+                    obj.deal(1, pp.color)
+                end
+            end
+        end
+    end
 end
 
 function GW_GAME:InitPlayer(player, card_name)
@@ -319,40 +384,6 @@ function GW_GAME:InitPlayer(player, card_name)
     self:InitControlDesk(player, math.ceil(#data.cards_ordered / #data.grid))
 
     self.data.players[player] = data
-end
-
-function GW_GAME:StartGame(randomize)
-    self.data.stage = STAGE_PLAY
-
-    self:HidePickUI()
-    UI.hide("pickCounter")
-    UI.hide('pickTip')
-
-    local cards = self:GetCardList()
-    for _, p in ipairs(Player.getPlayers()) do
-        local name = self.data.prepared_players[p.color]
-        if not name and randomize then
-            name = cards[math.random(#cards)]:GetName()
-        end
-
-        if name then
-            self:InitPlayer(p.color, name)
-            self:SetPage(p.color, 1)
-            for _, pp in ipairs(Player.getPlayers()) do
-                if p.color ~= pp.color then
-                    local obj = self:DuplicateHandCard(self:FindCard(name, cards))
-                    obj.setName('['..Color.fromString(p.color):toHex(false)..']'..obj.getName())
-                    obj.setDescription(p.steam_name.."'s guess target\n\n"..obj.getDescription())
-                    obj.deal(1, pp.color)
-                end
-            end
-        end
-    end
-
-    self:UiInitFilters()
-    UI.show('openFilters')
-
-    self.data.game_started = true
 end
 
 function GW_GAME:InitZones()
@@ -447,7 +478,7 @@ function GW_GAME:OnPickCard(deck, obj)
 end
 
 function GW_GAME:GetCardName(obj)
-    local prop = propertiesToTable(obj.getDescription())
+    local prop = PropertiesToTable(obj.getDescription())
     return prop['uniqueName'] or obj.getName()
 end
 
@@ -622,29 +653,6 @@ function GW_GAME:CDeskInitPages(player, cdesk, num_pages)
     end
 end
 
-function GW_GAME:UiInitFilters()
-    local ui_xml = UI.getXmlTable()
-    local panel_childs = getById(ui_xml, "filtersPanel").children
-
-    local btns = {}
-    for cat, _ in pairs(self.data.filters) do
-        local fnc_name = "exposeFilters_"..cat
-        _G[fnc_name] = function(ply) self:ExposeFilters(ply.color, cat) end
-        table.insert(btns, createButtonCategory(cat, fnc_name))
-    end
-
-    for _, ply in ipairs(Player.getAvailableColors()) do
-        table.insert(panel_childs, createFilterPane(ply))
-    end
-
-    getById(ui_xml, "category").children = btns
-    getById(ui_xml, "filtersPanel").attributes.width = FILTER_PANE_WIDTH
-    getById(ui_xml, "filtersPanel").attributes.height = FILTER_PANE_HEIGHT
-    UI.setXmlTable(ui_xml)
-
-    self.filters_opened = {}
-end
-
 function GW_GAME:ToggleFilters(ply)
     local was_active = self.filters_opened[ply] == true
     self.filters_opened[ply] = not self.filters_opened[ply]
@@ -675,21 +683,105 @@ function GW_GAME:ToggleFilters(ply)
     end
 end
 
-function GW_GAME:ExposeFilters(ply, cat)
-    local list = self.data.filters[cat]
+function GW_GAME:InitFilters(card_list)
+    local cat_map = {}
 
-    local btns = {}
-    for x, found in pairs(list) do
-        local text = x.." ("..#found..")"
-        local fnc_name = "toggleFilter_"..cat.."_"..x.."_"..ply
-        local fnc_name_second = fnc_name.."_second"
+    for _, card in ipairs(card_list) do
+        local properties = TblShallowCopy(card.properties)
+        properties['Name'] = card.name
 
-        _G[fnc_name] = function() self:ToggleCards(ply, found) end
-        _G[fnc_name_second] = function() self:ToggleCards(ply, found, true) end
-        table.insert(btns, createButtonFilter(text, fnc_name, fnc_name_second))
+        for k, v in pairs(properties) do
+            if k ~= 'uniqueName' then
+                local alias = CATEGORIES_ALIASES[k]
+                if alias then k = alias end
+
+                local cur_cat = k
+                local cur_f = v
+                if type(v) ~= "string" then
+                    cur_cat = BOOLEAN_CATEGORIES[k] or CAT_OTHER
+                    cur_f = k
+                end
+
+                if not cat_map[cur_cat] then
+                    cat_map[cur_cat] = {}
+                end
+                if not cat_map[cur_cat][cur_f] then
+                    cat_map[cur_cat][cur_f] = {}
+                end
+                table.insert(cat_map[cur_cat][cur_f], card:GetName())
+            end
+        end
     end
 
-    local columns = math.ceil(TableLength(list) / FILTER_CELL_CH)
+    local cat_order = {}
+    for cat, _ in pairs(cat_map) do
+        if cat == 'Name' then
+            table.insert(cat_order, 1, cat)
+        elseif cat ~= CAT_OTHER then
+            table.insert(cat_order, cat)
+        end
+    end
+    if cat_map[CAT_OTHER] then
+        table.insert(cat_order, {CAT_OTHER, cat_map[CAT_OTHER]})
+    end
+
+    return cat_map, cat_order
+end
+
+function GW_GAME:UiInitFilters()
+    local ui_xml = UI.getXmlTable()
+    local panel_childs = getById(ui_xml, "filtersPanel").children
+
+    local btns = {}
+    local cat_idx = 1
+    for _, cat in ipairs(self.data.filter_categories) do
+        local map = self.data.filters[cat]
+        local fnc_name = "exposeFilters_"..cat_idx
+        _G[fnc_name] = function(ply) self:ExposeFilters(ply.color, map, cat, cat_idx) end
+        table.insert(btns, createButtonCategory(cat, fnc_name))
+        cat_idx = cat_idx + 1
+    end
+
+    for _, ply in ipairs(Player.getAvailableColors()) do
+        table.insert(panel_childs, createFilterPane(ply))
+    end
+
+    getById(ui_xml, "category").children = btns
+    getById(ui_xml, "filtersPanel").attributes.width = FILTER_PANE_WIDTH
+    getById(ui_xml, "filtersPanel").attributes.height = FILTER_PANE_HEIGHT
+    getById(ui_xml, "toggleAll").attributes.height = FILTER_PANE_BUTTONS_SIZE
+    UI.setXmlTable(ui_xml)
+
+    self.filters_opened = {}
+end
+
+function GW_GAME:ExposeFilters(ply, map, cat, cat_idx)
+    local btns = {}
+    local x_idx = 1
+    for filter, list in pairs(map) do
+        local display_name = nil
+        local test = cat.." - "
+        if not StartsWith(filter, test) then
+            test = cat
+            if not StartsWith(filter, test) then
+                display_name = filter
+            end
+        end
+        if not display_name then
+            display_name = string.sub(filter, #test + 1)
+        end
+
+        local text = display_name.." ("..#list..")"
+        local fnc_name = "toggleFilter_"..cat_idx.."_"..x_idx.."_"..ply
+        local fnc_name_second = fnc_name.."_second"
+
+        _G[fnc_name] = function() self:ToggleCards(ply, list) end
+        _G[fnc_name_second] = function() self:ToggleCards(ply, list, true) end
+        table.insert(btns, createButtonFilter(text, fnc_name, fnc_name_second))
+        x_idx = x_idx + 1
+    end
+
+    local columns = math.ceil(TableLength(map) / FILTER_CELL_CH)
     local ui_xml = UI.getXmlTable()
     getById(ui_xml, "filterList_"..ply).children = btns
     getById(ui_xml, "filterList_"..ply).attributes.width = columns * FILTER_CELL_WIDTH + (columns - 1) * 4
@@ -721,9 +813,16 @@ function GW_GAME:ToggleCards(ply, list, invert)
 
         local new_state = false
         for name, state in pairs(data.card_states) do
-            if not state and not map[name] then
-                new_state = true
-                break
+            if not map[name] then
+                if not state then
+                    new_state = true
+                    break
+                end
+            else
+                if state then
+                    new_state = true
+                    break
+                end
             end
         end
 
@@ -769,39 +868,6 @@ function GW_GAME:GetCardsOnTable(ply)
         end
     end
     return on_table
-end
-
-function GW_GAME:InitFilters(card_list)
-    local cat_map = {}
-
-    for _, card in ipairs(card_list) do
-        local properties = TblShallowCopy(card.properties)
-        properties['Name'] = card.name
-
-        for k, v in pairs(properties) do
-            if k ~= 'uniqueName' then
-                local alias = CATEGORIES_ALIASES[k]
-                if alias then k = alias end
-
-                local cur_cat = k
-                local cur_f = v
-                if type(v) ~= "string" then
-                    cur_cat = BOOLEAN_CATEGORIES[k] or CAT_OTHER
-                    cur_f = k
-                end
-
-                if not cat_map[cur_cat] then
-                    cat_map[cur_cat] = {}
-                end
-                if not cat_map[cur_cat][cur_f] then
-                    cat_map[cur_cat][cur_f] = {}
-                end
-                table.insert(cat_map[cur_cat][cur_f], card:GetName())
-            end
-        end
-    end
-
-    return cat_map
 end
 
 function GW_GAME:GetControlDesk(player)
@@ -920,7 +986,7 @@ function GW_GAME:FixNameCollisions(card_list)
     end
 
     if count > 0 then
-        print('Fixed ' .. count .. ' name collisions')
+        log('Fixed ' .. count .. ' name collisions')
     end
 end
 
@@ -951,11 +1017,7 @@ function GW_GAME:GetCardList()
     return self:FromCardsCache(self.data.cards_cache)
 end
 
-function GW_GAME:InitCards()
-    local card_list = self:LoadCards()
-
-    self:FixNameCollisions(card_list)
-
+function GW_GAME:InitCards(card_list)
     local data_grid = {}
     local data_hand = {}
 
@@ -997,9 +1059,6 @@ function GW_GAME:InitCards()
 
     destroyObject(deck_g)
     destroyObject(deck_h)
-
-    self.data.filters = self:InitFilters(card_list)
-    self.data.cards_cache = self:GenerateCardsCache(card_list)
 end
 
 function GW_GAME:InitDecks()
@@ -1425,6 +1484,14 @@ end
 
 function onClickFilters(ply)
     GW_GAME:ToggleFilters(ply.color)
+end
+
+function onClickToggleAll(ply)
+    local list = {}
+    for x, _ in pairs(GW_GAME:PlayerData(ply.color).card_states) do
+        table.insert(list, x)
+    end
+    GW_GAME:ToggleCards(ply.color, list)
 end
 
 
