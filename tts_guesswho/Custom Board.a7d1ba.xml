@@ -1,8 +1,7 @@
 <Defaults>
-    <Panel
-        active="true" />
+    <Panel active="true" />
     <Panel class="main"
-        active="true"
+        active="false"
         ignoreLayout="true" />
     <Text 
         color="#F0F0F0"
@@ -14,23 +13,29 @@
 
 <Panel id="main" class="main"
     position="0 0 -60"
-    rotation="0 0 180"
+    rotation="0 0 0"
     width="1600"
     height="1600">
     <Text alignment="middleLeft">|</Text>
     <Text alignment="middleRight">|</Text>
     <Text alignment="lowerCenter">------</Text>
     <Text alignment="upperCenter" class="tip"
-    ><i><b>TIP:</b> You can use custom keys (numpad by default) for selecting pages 1-9</i></Text>
-    <VerticalScrollView active="false"
+        ><i><b>TIP:</b> You can use custom keys (numpad by default) for selecting pages 1-9</i></Text>
+    <VerticalScrollView
         width="30%"
         height="97%"
         rectAlignment="lowerLeft">
         <VerticalLayout id="category"
             childForceExpandHeight="false"
-            childAlignment="UpperCenter">
-            <Panel preferredheight="64"><Button onClick="none">Click Me</Button></Panel>
-            <Panel preferredheight="64"><Button onClick="none">Click Me</Button></Panel>
-        </VerticalLayout>
+            childAlignment="UpperCenter" />
     </VerticalScrollView>
+    <HorizontalScrollView
+        width="70%"
+        height="97%"
+        rectAlignment="lowerRight">
+        <GridLayout id="filterList"
+            childAlignment="UpperLeft"
+            cellSize="480 64"
+            spacing="8 8" />
+    </HorizontalScrollView>
 </Panel>

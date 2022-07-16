@@ -36,6 +36,30 @@ DEFAULT_CONFIG = {
     shuffle_players_grid = false,
 }
 
+CATEGORIES_ALIASES = {
+    ['From Title'] = 'Title'
+}
+
+CAT_OTHER = 'Other'
+CAT_SOURCE = 'Title Source'
+CAT_GENRE = 'Title Genre'
+BOOLEAN_CATEGORIES = {
+    ['From Game'] = CAT_SOURCE,
+    ['From Collection-RPG Game'] = CAT_SOURCE,
+    ['From Non-Asian Title'] = CAT_SOURCE,
+    ['From Anime/Manga/Ranobe'] = CAT_SOURCE,
+    ['Title Genre - Romance'] = CAT_GENRE,
+    ['Title Genre - Harem-Like'] = CAT_GENRE,
+}
+
+
+function DIAG_Time(label, fnc)
+    local st = os.time() * 1000
+    local res = table.pack(fnc())
+    local et = os.time() * 1000
+    log(label..": "..(et - st).."ms")
+    return table.unpack(res)
+end
 
 function Vec2f(x, y)
     if type(x) == "userdata" then
@@ -58,6 +82,20 @@ function TblAdd(dest, src, inherit)
             dest[k] = v
         end
     end
+end
+
+function TblShallowCopy(t)
+    local t2 = {}
+    for k,v in pairs(t) do
+        t2[k] = v
+    end
+    return t2
+end
+
+function TableLength(t)
+    local count = 0
+    for _ in pairs(t) do count = count + 1 end
+    return count
 end
 
 function FlipKV(tbl, fill_instead)
@@ -404,7 +442,7 @@ end
 function GW_GAME:UpdPickDeck()
     local deck = getObjectFromGUID(self.data.pick_deck_guid)
     if not deck and (not self.data.picked_now or #self.data.picked_now == 0) then return end
-    
+
     Wait.frames(function ()
         local objs = self.data.picked_now
         local names = {}
@@ -503,7 +541,7 @@ function GW_GAME:InitControlDesk(player, num_pages)
 
     local try = function ()
         cdesk.UI.show('main')
-        self:CDeskInitFilters(cdesk)
+        self:CDeskInitFilters(cdesk, player)
     end
     Wait.condition(try, function () return not cdesk.UI.loading end, 15, function()
         print('ERROR: Cannot load control desk UI')
@@ -573,15 +611,120 @@ function GW_GAME:CDeskInitPages(player, cdesk, num_pages)
     end
 end
 
-function GW_GAME:CDeskInitFilters(cdesk)
-    -- local btns = {}
-    -- for i = 1, 10, 1 do
-    --     table.insert(btns, createButtonFilter("Test"))
-    -- end
-    -- local cdesk = getObjectFromGUID(GUID_OPERATING_TABLE)
-    -- local ui_xml = cdesk.UI.getXmlTable()
-    -- getById(ui_xml, "category").children = btns
-    -- cdesk.UI.setXmlTable(ui_xml)
+function GW_GAME:CDeskInitFilters(cdesk, ply)
+    local btns = {}
+
+    for cat, _ in pairs(self.data.filters) do
+        local fnc_name = "exposeFilters_"..cat.."_"..ply
+        _G[fnc_name] = function() self:ExposeFilters(ply, cat) end
+        table.insert(btns, createButtonFilter(cat, fnc_name))
+    end
+
+    local ui_xml = cdesk.UI.getXmlTable()
+    getById(ui_xml, "category").children = btns
+    cdesk.UI.setXmlTable(ui_xml)
+end
+
+function GW_GAME:ExposeFilters(ply, cat)
+    local list = self.data.filters[cat]
+
+    local btns = {}
+    for x, found in pairs(list) do
+        local text = x.." ("..#found..")"
+        local fnc_name = "toggleFilter_"..cat.."_"..x.."_"..ply
+
+        _G[fnc_name] = function() self:ToggleCards(ply, found) end
+        table.insert(btns, createButtonFilter(text, fnc_name))
+    end
+
+    local cdesk = self:GetControlDesk(ply)
+    local ui_xml = cdesk.UI.getXmlTable()
+    getById(ui_xml, "filterList").children = btns
+    cdesk.UI.setXmlTable(ui_xml)
+end
+
+function GW_GAME:ToggleCards(ply, list)
+    local on_table = self:GetCardsOnTable(ply)
+    local data = self:PlayerData(ply)
+
+    local new_state = false
+    for _, name in ipairs(list) do
+        if not data.card_states[name] then
+            new_state = true
+            break
+        end
+    end
+
+    for _, name in ipairs(list) do
+        self:ToggleCard(ply, name, new_state, on_table)
+    end
+end
+
+function GW_GAME:ToggleCard(ply, name, new_state, on_table_list)
+    local data = self:PlayerData(ply)
+
+    if new_state == nil then
+        new_state = not data.card_states[name]
+    end
+
+    if not on_table_list then
+        on_table_list = self:GetCardsOnTable(ply)
+    end
+
+    if data.card_states[name] ~= new_state then
+        local obj = on_table_list[name]
+        if obj then
+            obj.flip()
+        end
+        data.card_states[name] = new_state
+    end
+end
+
+function GW_GAME:GetCardsOnTable(ply)
+    local on_table = {}
+    local zone = self:GetPlyZone(ply)
+    for _, obj in pairs(zone.getObjects()) do
+        if obj then
+            local card = self:GetCardName(obj)
+            if card then
+                on_table[card] = obj
+            end
+        end
+    end
+    return on_table
+end
+
+function GW_GAME:InitFilters(card_list)
+    local cat_map = {}
+
+    for _, card in ipairs(card_list) do
+        local properties = TblShallowCopy(card.properties)
+        properties['Name'] = card.name
+
+        for k, v in pairs(properties) do
+            if k ~= 'uniqueName' then
+                local alias = CATEGORIES_ALIASES[k]
+                if alias then k = alias end
+
+                local cur_cat = k
+                local cur_f = v
+                if type(v) ~= "string" then
+                    cur_cat = BOOLEAN_CATEGORIES[k] or CAT_OTHER
+                    cur_f = k
+                end
+
+                if not cat_map[cur_cat] then
+                    cat_map[cur_cat] = {}
+                end
+                if not cat_map[cur_cat][cur_f] then
+                    cat_map[cur_cat][cur_f] = {}
+                end
+                table.insert(cat_map[cur_cat][cur_f], card:GetName())
+            end
+        end
+    end
+
+    return cat_map
 end
 
 function GW_GAME:GetControlDesk(player)
@@ -628,7 +771,7 @@ function GW_GAME:CheckZoneEnterance(zone, obj)
 
     if not zone.hasTag(owner_tag) then
         destroyObject(obj)
-        
+
         self:RunLater(player_owner..':disturbing', function()
             broadcastToColor("DO NOT disturb other player's zones!", player_owner, Color.Red)
             self:SetPage(player_owner, true)
@@ -721,9 +864,6 @@ function GW_GAME:FindCard(name, list)
         if card:GetName() == name then
             return card
         end
-        if name == "Shiratsuyu" then
-            print("NOT: "..card:GetName())
-        end
     end
 end
 
@@ -780,12 +920,13 @@ function GW_GAME:InitCards()
 
     destroyObject(deck_g)
     destroyObject(deck_h)
-    
+
+    self.data.filters = self:InitFilters(card_list)
     self.data.cards_cache = self:GenerateCardsCache(card_list)
 end
 
 function GW_GAME:InitDecks()
-    for name, guid in pairs({ 
+    for name, guid in pairs({
         ['grid'] = GUID_GRID_DECK_ZONE,
         ['hand'] = GUID_HAND_DECK_ZONE
     }) do
@@ -1094,7 +1235,7 @@ function createButtonFilter(text, fnc_name)
             {
                 tag="Button",
                 attributes={
-                    onClick=fnc_name or "none",
+                    onClick="Global/"..(fnc_name or "none"),
                 },
                 value=text or "---",
             }
