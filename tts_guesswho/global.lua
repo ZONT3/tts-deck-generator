@@ -24,6 +24,15 @@ CONTROL_TABLE_SIZE_KOEF = 500
 CONTROL_TABLE_W = 27
 CONTROL_TABLE_H = 16.8
 
+FILTER_CELL_WIDTH = 300
+FILTER_CELL_HEIGHT = 32
+FILTER_CELL_CW = 2
+FILTER_CELL_CH = 8
+
+FILTER_PANE_WIDTH = (FILTER_CELL_CW * FILTER_CELL_WIDTH + (FILTER_CELL_CW - 1) * 4) / 0.8
+FILTER_PANE_HEIGHT = (FILTER_CELL_CH * FILTER_CELL_HEIGHT + (FILTER_CELL_CH - 1) * 4) / 0.9
+FILTER_PANE_BUTTONS_SIZE = FILTER_PANE_HEIGHT * 0.05
+
 ENABLE_ZERO_PAGE = false
 
 PLAYER_MAPPING_ID2K = {
@@ -340,6 +349,9 @@ function GW_GAME:StartGame(randomize)
         end
     end
 
+    self:UiInitFilters()
+    UI.show('openFilters')
+
     self.data.game_started = true
 end
 
@@ -541,7 +553,6 @@ function GW_GAME:InitControlDesk(player, num_pages)
 
     local try = function ()
         cdesk.UI.show('main')
-        self:CDeskInitFilters(cdesk, player)
     end
     Wait.condition(try, function () return not cdesk.UI.loading end, 15, function()
         print('ERROR: Cannot load control desk UI')
@@ -611,18 +622,57 @@ function GW_GAME:CDeskInitPages(player, cdesk, num_pages)
     end
 end
 
-function GW_GAME:CDeskInitFilters(cdesk, ply)
-    local btns = {}
+function GW_GAME:UiInitFilters()
+    local ui_xml = UI.getXmlTable()
+    local panel_childs = getById(ui_xml, "filtersPanel").children
 
+    local btns = {}
     for cat, _ in pairs(self.data.filters) do
-        local fnc_name = "exposeFilters_"..cat.."_"..ply
-        _G[fnc_name] = function() self:ExposeFilters(ply, cat) end
-        table.insert(btns, createButtonFilter(cat, fnc_name))
+        local fnc_name = "exposeFilters_"..cat
+        _G[fnc_name] = function(ply) self:ExposeFilters(ply.color, cat) end
+        table.insert(btns, createButtonCategory(cat, fnc_name))
     end
 
-    local ui_xml = cdesk.UI.getXmlTable()
+    for _, ply in ipairs(Player.getAvailableColors()) do
+        table.insert(panel_childs, createFilterPane(ply))
+    end
+
     getById(ui_xml, "category").children = btns
-    cdesk.UI.setXmlTable(ui_xml)
+    getById(ui_xml, "filtersPanel").attributes.width = FILTER_PANE_WIDTH
+    getById(ui_xml, "filtersPanel").attributes.height = FILTER_PANE_HEIGHT
+    UI.setXmlTable(ui_xml)
+
+    self.filters_opened = {}
+end
+
+function GW_GAME:ToggleFilters(ply)
+    local was_active = self.filters_opened[ply] == true
+    self.filters_opened[ply] = not self.filters_opened[ply]
+
+    local count = 0
+    local players = {}
+    for p, state in pairs(self.filters_opened) do
+        if state then
+            table.insert(players, p)
+            if p ~= ply then count = count + 1 end
+        end
+    end
+
+    local str = ''
+    for _, v in ipairs(players) do
+        if str ~= '' then
+            str = str..'|'
+        end
+        str = str..v
+    end
+
+    if was_active and count == 0 then
+        UI.hide("filtersPanel")
+    end
+    UI.setAttribute("filtersPanel", "visibility", str)
+    if not was_active and count == 0 then
+        UI.show("filtersPanel")
+    end
 end
 
 function GW_GAME:ExposeFilters(ply, cat)
@@ -632,31 +682,58 @@ function GW_GAME:ExposeFilters(ply, cat)
     for x, found in pairs(list) do
         local text = x.." ("..#found..")"
         local fnc_name = "toggleFilter_"..cat.."_"..x.."_"..ply
+        local fnc_name_second = fnc_name.."_second"
 
         _G[fnc_name] = function() self:ToggleCards(ply, found) end
-        table.insert(btns, createButtonFilter(text, fnc_name))
+        _G[fnc_name_second] = function() self:ToggleCards(ply, found, true) end
+        table.insert(btns, createButtonFilter(text, fnc_name, fnc_name_second))
     end
 
-    local cdesk = self:GetControlDesk(ply)
-    local ui_xml = cdesk.UI.getXmlTable()
-    getById(ui_xml, "filterList").children = btns
-    cdesk.UI.setXmlTable(ui_xml)
+    local columns = math.ceil(TableLength(list) / FILTER_CELL_CH)
+    local ui_xml = UI.getXmlTable()
+    getById(ui_xml, "filterList_"..ply).children = btns
+    getById(ui_xml, "filterList_"..ply).attributes.width = columns * FILTER_CELL_WIDTH + (columns - 1) * 4
+    UI.setXmlTable(ui_xml)
 end
 
-function GW_GAME:ToggleCards(ply, list)
+function GW_GAME:ToggleCards(ply, list, invert)
     local on_table = self:GetCardsOnTable(ply)
     local data = self:PlayerData(ply)
 
-    local new_state = false
-    for _, name in ipairs(list) do
-        if not data.card_states[name] then
-            new_state = true
-            break
+    if not invert then
+        local new_state = false
+        for _, name in ipairs(list) do
+            if not data.card_states[name] then
+                new_state = true
+                break
+            end
         end
-    end
 
-    for _, name in ipairs(list) do
-        self:ToggleCard(ply, name, new_state, on_table)
+        for _, name in ipairs(list) do
+            self:ToggleCard(ply, name, new_state, on_table)
+        end
+
+    else
+        local map = {}
+        for _, name in ipairs(list) do
+            map[name] = true
+        end
+
+        local new_state = false
+        for name, state in pairs(data.card_states) do
+            if not state and not map[name] then
+                new_state = true
+                break
+            end
+        end
+
+        for name, _ in pairs(data.card_states) do
+            if not map[name] then
+                self:ToggleCard(ply, name, new_state, on_table)
+            else
+                self:ToggleCard(ply, name, not new_state, on_table)
+            end
+        end
     end
 end
 
@@ -1225,7 +1302,7 @@ function getById(data, id, recursive)
     end
 end
 
-function createButtonFilter(text, fnc_name)
+function createButtonCategory(text, fnc_name)
     return {
         tag="Panel",
         attributes={
@@ -1238,6 +1315,64 @@ function createButtonFilter(text, fnc_name)
                     onClick="Global/"..(fnc_name or "none"),
                 },
                 value=text or "---",
+            }
+        }
+    }
+end
+
+function createButtonFilter(text, fnc_name, fnc_name_second)
+    return {
+        tag="Panel",
+        attributes={
+            width="100%",
+            height="100%",
+        },
+        children={
+            {
+                tag="Button",
+                attributes={
+                    onClick="Global/"..(fnc_name or "none"),
+                    fontSize="14",
+                    width="85%",
+                    rectAlignment="MiddleLeft",
+                },
+                value=text or "---",
+            },
+            {
+                tag="Button",
+                attributes={
+                    onClick="Global/"..(fnc_name_second or "none"),
+                    fontSize="24",
+                    width="15%",
+                    rectAlignment="MiddleRight",
+                },
+                value="O",
+            }
+        }
+    }
+end
+
+function createFilterPane(ply)
+    return {
+        tag="HorizontalScrollView",
+        attributes={
+            visibility=ply,
+            width="70%",
+            height="95%",
+            rectAlignment="LowerRight",
+        },
+        children={
+            {
+                tag="GridLayout",
+                attributes={
+                    id="filterList_"..ply,
+                    childAlignment="UpperLeft",
+                    cellSize=FILTER_CELL_WIDTH.." "..FILTER_CELL_HEIGHT,
+                    spacing="4 4",
+                    startAxis="Vertical",
+                    constraint="FixedRowCount",
+                    constraintCount=""..FILTER_CELL_CH,
+                }
             }
         }
     }
@@ -1286,6 +1421,10 @@ end
 function onClickPickDoneRand()
     GW_GAME:StartGame(true)
     UI.hide('pickDone')
+end
+
+function onClickFilters(ply)
+    GW_GAME:ToggleFilters(ply.color)
 end
 
 

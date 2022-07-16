@@ -1,44 +1,65 @@
 <Defaults>
-    <Button active="false"/>
-    <Button class="init" active="true"/>
+    <Button
+        fontSize="24"
+        colors="#282828|#E18D15|#8E8E8E|#8E8E8E"
+        textColor="#F0F0F0" />
     <Button class="start" 
         visibility="Admin"
         width="200"
         height="60"
         rectAlignment="LowerCenter"
         offsetXY="0 20"
-        colors="#282828|#E18D15|#8E8E8E|#8E8E8E"
-        textColor="#F0F0F0"
-        fontStyle="Bold"
-        fontSize="24" />
+        fontStyle="Bold" />
     <Button class="small"
         height="20"
         fontSize="14"
         />
-    <Text active="false"
+    <Button class="square" 
+        width="60"
+        height="60" />
+    <Text
         fontSize="24"
         color="#FFFFFF"/>
 </Defaults>
 
-<Button id="startGame" class="start init" onclick="onClickStartGame">Start Picking</Button>
+<Button id="startGame" class="start" onclick="onClickStartGame">Start Picking</Button>
 <Panel id="pickDone" active="false"
     rectAlignment="LowerCenter"
     offsetXY="0 20"
     width="200"
     height="110">
-    <Button class="start init" onclick="onClickPickDone" offsetXY="0 0">Start Game</Button>
-    <Button class="start small init" onclick="onClickPickDoneRand" offsetXY="0 65">Randomize unpicked</Button>
-    <Button class="start small init" onclick="onClickPickDoneRand" interactable="false" offsetXY="0 90">Randomize all</Button>
+    <Button class="start" onclick="onClickPickDone" offsetXY="0 0">Start Game</Button>
+    <Button class="start small" onclick="onClickPickDoneRand" offsetXY="0 65">Randomize unpicked</Button>
+    <Button class="start small" onclick="onClickPickDoneRand" interactable="false" offsetXY="0 90">Randomize all</Button>
 </Panel>
 
-<Text id="pickTip"
+<Text id="pickTip" active="false"
     alignment="UpperCenter"
     offsetXY="0 -200"
 >Use blindfold for allowing others<br/>to pick your guessing target!<br/><textsize size="18"><i><b>B</b> by default</i></textsize></Text>
-<Text id="pickCounter"
+<Text id="pickCounter" active="false"
     alignment="UpperRight"
     offsetXY="-320 -200" />
 
+<Button id="openFilters" class="square" active="false"
+    rectAlignment="LowerRight"
+    offsetXY="-8 100"
+    onclick="onClickFilters">Filters</Button>
+
+<Panel active="false" id="filtersPanel"
+    width="40%"
+    height="30%"
+    rectAlignment="lowerRight"
+    offsetXY="-100 10">
+    <VerticalScrollView
+        width="30%"
+        height="95%"
+        rectAlignment="lowerLeft">
+        <VerticalLayout id="category"
+            childForceExpandHeight="false"
+            childAlignment="UpperCenter" />
+    </VerticalScrollView>
+</Panel>
 
 <!-- 
 button_normal             #282828
