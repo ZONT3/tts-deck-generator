@@ -29,7 +29,7 @@ FILTER_CELL_HEIGHT = 32
 FILTER_CELL_CW = 2
 FILTER_CELL_CH = 8
 
-FILTER_PANE_WIDTH = (FILTER_CELL_CW * FILTER_CELL_WIDTH + (FILTER_CELL_CW - 1) * 4) / 0.8
+FILTER_PANE_WIDTH = (FILTER_CELL_CW * FILTER_CELL_WIDTH + (FILTER_CELL_CW - 1) * 4) / 0.7
 FILTER_PANE_HEIGHT = (FILTER_CELL_CH * FILTER_CELL_HEIGHT + (FILTER_CELL_CH - 1) * 4) / 0.9
 FILTER_PANE_BUTTONS_SIZE = FILTER_PANE_HEIGHT * 0.05
 
@@ -722,7 +722,7 @@ function GW_GAME:InitFilters(card_list)
         end
     end
     if cat_map[CAT_OTHER] then
-        table.insert(cat_order, {CAT_OTHER, cat_map[CAT_OTHER]})
+        table.insert(cat_order, CAT_OTHER)
     end
 
     return cat_map, cat_order
@@ -732,21 +732,73 @@ function GW_GAME:UiInitFilters()
     local ui_xml = UI.getXmlTable()
     local panel_childs = getById(ui_xml, "filtersPanel").children
 
-    local btns = {}
+    local ply_panels = {}
+    local ply_panels_sizes = {}
+    local cat_btns = {}
     local cat_idx = 1
     for _, cat in ipairs(self.data.filter_categories) do
         local map = self.data.filters[cat]
         local fnc_name = "exposeFilters_"..cat_idx
-        _G[fnc_name] = function(ply) self:ExposeFilters(ply.color, map, cat, cat_idx) end
-        table.insert(btns, createButtonCategory(cat, fnc_name))
+        local cur_cat_idx = cat_idx
+        _G[fnc_name] = function(ply) self:ExposeFilters(ply.color, cur_cat_idx) end
+        table.insert(cat_btns, createButtonCategory(cat, fnc_name))
+
+        for ply, data in pairs(self.data.players) do
+            local show = not ply_panels[ply]
+            if show then
+                local panel, holder = createFilterPane(ply)
+                ply_panels[ply] = holder
+                ply_panels_sizes[ply] = 0
+                table.insert(panel_childs, panel)
+            end
+
+            local columns = math.ceil(TableLength(map) / FILTER_CELL_CH)
+            local width = columns * FILTER_CELL_WIDTH + (columns - 1) * 4
+
+            local filter_pane = ply_panels[ply]
+            local filter_grid, filter_grid_id = createFilterGrid(ply, cat_idx, width, show)
+
+            if ply_panels_sizes[ply] < width then
+                filter_pane.attributes.width = width
+                ply_panels_sizes[ply] = width
+            end
+
+            if not data.filter_grids then data.filter_grids = {} end
+            table.insert(data.filter_grids, filter_grid_id)
+            table.insert(filter_pane.children, filter_grid)
+
+            local filter_btns = {}
+            local x_idx = 1
+            for filter, list in pairs(map) do
+                local display_name = nil
+                local test = cat.." - "
+                if not StartsWith(filter, test) then
+                    test = cat
+                    if not StartsWith(filter, test) then
+                        display_name = filter
+                    end
+                end
+                if not display_name then
+                    display_name = string.sub(filter, #test + 1)
+                end
+
+                local text = display_name.." ("..#list..")"
+                local fnc_name = "toggleFilter_"..cat_idx.."_"..x_idx.."_"..ply
+                local fnc_name_second = fnc_name.."_second"
+
+                _G[fnc_name] = function() self:ToggleCards(ply, list) end
+                _G[fnc_name_second] = function() self:ToggleCards(ply, list, true) end
+                table.insert(filter_btns, createButtonFilter(text, fnc_name, fnc_name_second))
+                x_idx = x_idx + 1
+            end
+
+            filter_grid.children = filter_btns
+        end
+
         cat_idx = cat_idx + 1
     end
 
-    for _, ply in ipairs(Player.getAvailableColors()) do
-        table.insert(panel_childs, createFilterPane(ply))
-    end
-
-    getById(ui_xml, "category").children = btns
+    getById(ui_xml, "category").children = cat_btns
     getById(ui_xml, "filtersPanel").attributes.width = FILTER_PANE_WIDTH
     getById(ui_xml, "filtersPanel").attributes.height = FILTER_PANE_HEIGHT
     getById(ui_xml, "toggleAll").attributes.height = FILTER_PANE_BUTTONS_SIZE
@@ -755,37 +807,15 @@ function GW_GAME:UiInitFilters()
     self.filters_opened = {}
 end
 
-function GW_GAME:ExposeFilters(ply, map, cat, cat_idx)
-    local btns = {}
-    local x_idx = 1
-    for filter, list in pairs(map) do
-        local display_name = nil
-        local test = cat.." - "
-        if not StartsWith(filter, test) then
-            test = cat
-            if not StartsWith(filter, test) then
-                display_name = filter
-            end
+function GW_GAME:ExposeFilters(ply, cat_idx)
+    local data = self:PlayerData(ply)
+    local cur_id = "filterList_"..ply.."_"..cat_idx
+    for _, id in ipairs(data.filter_grids) do
+        if id ~= cur_id then
+            UI.hide(id)
         end
-        if not display_name then
-            display_name = string.sub(filter, #test + 1)
-        end
-
-        local text = display_name.." ("..#list..")"
-        local fnc_name = "toggleFilter_"..cat_idx.."_"..x_idx.."_"..ply
-        local fnc_name_second = fnc_name.."_second"
-
-        _G[fnc_name] = function() self:ToggleCards(ply, list) end
-        _G[fnc_name_second] = function() self:ToggleCards(ply, list, true) end
-        table.insert(btns, createButtonFilter(text, fnc_name, fnc_name_second))
-        x_idx = x_idx + 1
     end
-
-    local columns = math.ceil(TableLength(map) / FILTER_CELL_CH)
-    local ui_xml = UI.getXmlTable()
-    getById(ui_xml, "filterList_"..ply).children = btns
-    getById(ui_xml, "filterList_"..ply).attributes.width = columns * FILTER_CELL_WIDTH + (columns - 1) * 4
-    UI.setXmlTable(ui_xml)
+    UI.show(cur_id)
 end
 
 function GW_GAME:ToggleCards(ply, list, invert)
@@ -1412,29 +1442,47 @@ function createButtonFilter(text, fnc_name, fnc_name_second)
 end
 
 function createFilterPane(ply)
-    return {
+    local holder = {
+        tag="Panel",
+        attributes={
+            height="100%",
+            width="100%",
+        },
+        children={},
+    }
+    local pane = {
         tag="HorizontalScrollView",
         attributes={
             visibility=ply,
-            width="70%",
             height="95%",
+            width="70%",
             rectAlignment="LowerRight",
         },
         children={
-            {
-                tag="GridLayout",
-                attributes={
-                    id="filterList_"..ply,
-                    childAlignment="UpperLeft",
-                    cellSize=FILTER_CELL_WIDTH.." "..FILTER_CELL_HEIGHT,
-                    spacing="4 4",
-                    startAxis="Vertical",
-                    constraint="FixedRowCount",
-                    constraintCount=""..FILTER_CELL_CH,
-                }
-            }
+            holder
         }
     }
+    return pane, holder
+end
+
+function createFilterGrid(ply, cat_idx, width, show)
+    local id = "filterList_"..ply.."_"..cat_idx
+    return {
+        tag="GridLayout",
+        attributes={
+            id=id,
+            active=show and "true" or "false",
+            rectAlignment="UpperLeft",
+            width=width,
+            height="100%",
+            childAlignment="UpperLeft",
+            cellSize=FILTER_CELL_WIDTH.." "..FILTER_CELL_HEIGHT,
+            spacing="4 4",
+            startAxis="Vertical",
+            constraint="FixedRowCount",
+            constraintCount=""..FILTER_CELL_CH,
+        }
+    }, id
 end
 
 
