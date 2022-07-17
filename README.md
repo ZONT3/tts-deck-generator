@@ -17,8 +17,7 @@ Python tools for generating decks and uploading into game save
 ### Save injection
 
 See steps 1-3 from above. Use option `-s PATH/TO/SAVE` for modifying a save.
-Use option `-g GUID` for injection `grid_sheet` into deck in save, specified by GUID.
-Use option `-G GUID` for injection `clean_sheet` into another deck in save.
+Use option `-g GUID` to specify injection deck in game save. Can be comma-separated list.
 Both options are replacing contents of deck in game (maybe appending will be implemented later) 
 
 ## TODO

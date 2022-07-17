@@ -6,11 +6,12 @@ from argparse import ArgumentParser
 from typing import Optional
 
 from PIL import Image, ImageColor
+import json
 from tqdm import tqdm
 
 import tts_deckgen.image_processing as ip
 import tts_deckgen.save_processing as sp
-from tts_deckgen.deck import Deck, DEFAULT_STAMP_IMAGE, DeckSheet, load_cards_info
+import tts_deckgen.deck as d
 from tts_deckgen.properties_editor import edit_properties, write_changes
 from tts_deckgen.save_processing import SaveProcessor
 
@@ -22,19 +23,19 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None, bg_co
     if bg_color is not None:
         bg_color = ImageColor.getrgb(f'#{bg_color.lower()}ff')
 
-    stamp_img = ip.download_img(DEFAULT_STAMP_IMAGE)
+    stamp_img = ip.download_img(d.DEFAULT_STAMP_IMAGE)
     info = []
     pics_fixed = []
     pics_face = []
     pics_back = None if no_rejected else []
 
-    listdir = os.listdir(pics_dir)
+    listdir = sorted(os.listdir(pics_dir))
     for f in tqdm_inst(listdir, total=len(listdir), unit='pic', desc='Preparing pictures'):
         if f.lower().split('.')[-1] in ['jpg', 'jpeg', 'png']:
             name = '.'.join(f.split('.')[0:-1])
             name = re.sub(r'\s*\[\d+]$', '', name)
             name = re.sub(r'^\[\d+]\s*', '', name)
-            name = re.sub(r'^\(\d+\)\s*', '', name)
+            name = re.sub(r'\s*\(\d+\)$', '', name)
             name = re.sub(r'^\(\d+\)\s*', '', name)
 
             info.append({'Nickname': name})
@@ -47,14 +48,14 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None, bg_co
                 pics_back.append(ip.stamp(fixed, stamp_img))
 
     print('DECK: grid')
-    grid_deck = Deck.create(pics_face, back_images=pics_back, info=info, tqdm_inst=tqdm_inst, bg_color=bg_color)
+    grid_deck = d.Deck.create(pics_face, back_images=pics_back, info=info, tqdm_inst=tqdm_inst, bg_color=bg_color)
     print('DECK: clean')
-    clean_deck = Deck.create(pics_fixed, tqdm_inst=tqdm_inst, info=info, bg_color=bg_color)
+    clean_deck = d.Deck.create(pics_fixed, tqdm_inst=tqdm_inst, info=info, bg_color=bg_color)
 
     print('Saving...')
     os.makedirs(output_dir, exist_ok=True)
     for prefix, deck in (('grid', grid_deck), ('clean', clean_deck)):
-        deck.save(output_dir, prefix)
+        deck.save(output_dir, prefix, 'grid' == prefix)
         print(f'{prefix}: {deck.sheets_info()}')
 
     return grid_deck, clean_deck
@@ -100,8 +101,23 @@ def insert_urls(game_save, output, show=True):
         print('Wrote modified file')
 
 
-def load(deck_dir, prefix):
-    return DeckSheet.load(deck_dir, prefix), load_cards_info(deck_dir, prefix)
+def merge_cards(deck_dir, prefix, into, from_fp):
+    with open(from_fp) as fp:
+        src = json.load(fp)
+    
+    add = {}
+    for c in src:
+        if 'Nickname' not in c or 'Properties' not in c:
+            continue
+        for idx, cc in enumerate(into):
+            if 'Nickname' in cc and cc['Nickname'] == c['Nickname']:
+                break
+        else:
+            continue
+        
+        add[idx] = c['Properties']
+
+    write_changes(os.path.join(deck_dir, f'{prefix}_cards_info.json'), into, add, {})
 
 
 def main():
@@ -116,17 +132,17 @@ def main():
                    help='Enter properties editor mode. Allows you to interactively edit card\'s properties.'
                         'Saved deck must be set. Game save and guid are optional. (-D, -s, -g options respectively).')
     p.add_argument('--fix', action='store_true', help='Restores save (-s option) to untouched state')
+    p.add_argument('-m', '--merge', type=str, default=None, help='Merges specified card info into specified with -D option')
 
     p.add_argument('-o', '--output', type=str, default='output', help='Output dir')
     p.add_argument('-R', '--no-rejected', action='store_true', help='Do not generate "Rejected" as back')
 
     p.add_argument('-p', '--prefix', type=str, default='grid,clean',
-                   help='Deck prefix for -D or -P option. Can be "grid" or "clean", or any custom. '
-                        'Can be comma-separated list (for -P mode only).')
+                   help='Deck prefix for -D and/or -P option. Will be prefix for info JSON files. Can be comma-separated list,'
+                   'only has effect if list size is equal to guid (-g) list.')
 
     p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
-    p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save')
-    p.add_argument('-G', '--guid-clean', type=str, default=None, help='Target second (clean) deck')
+    p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save. Can be comma-separated list.')
     p.add_argument('-a', '--append', action='store_true', help='Append to deck in save instead of overwrite')
 
     p.add_argument('-i', '--show-img', action='store_true', help='Show images for --insert-url interaction. '
@@ -176,30 +192,37 @@ def main():
     if args.deck_dir:
         if not os.path.isdir(args.deck_dir):
             raise AssertionError('--deck-dir does not represent a dir')
-        if not args.game_save and not args.properties:
+        if not args.game_save and not args.properties and not args.merge:
             raise AssertionError('--game-save not set')
         if not args.guid and args.game_save:
             raise AssertionError('--guid not set')
 
         prefix_list = args.prefix.split(',')
-        deck = load(args.deck_dir, prefix_list[0])
+        cards = d.load_cards_info(args.deck_dir, prefix_list[0])
+
+        if os.path.isfile(args.merge):
+            merge_cards(args.deck_dir, prefix_list[0], cards, args.merge)
 
         save = True
         if args.properties:
-            sheets, cards = deck
+            sheets = d.DeckSheet.load(args.deck_dir, prefix_list[0])
             save, add, rm = edit_properties(sheets, cards)
             if save:
                 for prefix in prefix_list:
                     write_changes(os.path.join(args.deck_dir, f'{prefix}_cards_info.json'), cards, add, rm)
+                    break
 
         if save and args.game_save:
             guids = args.guid.split(',')
             for i, guid in enumerate(guids):
+                if len(prefix_list) > i:
+                    deck = d.DeckSheet.load(args.deck_dir, prefix_list[i])
                 if len(guids) == len(prefix_list) and i > 0:
-                    deck = load(args.deck_dir, prefix_list[i])
+                    if os.path.isfile(os.path.join(args.deck_dir, f'{prefix_list[i]}_cards_info.json')):
+                        cards = d.load_cards_info(args.deck_dir, prefix_list[i])
                 p = SaveProcessor(args.game_save)
                 p.set_object(guid, append_content=args.append)
-                p.write_decks(deck)
+                p.write_decks((deck, cards))
 
     elif args.pics_dir:
         if not os.path.isdir(args.pics_dir):
@@ -211,12 +234,13 @@ def main():
             p = SaveProcessor(args.game_save)
 
             if args.guid:
-                p.set_object(args.guid_clean, append_content=args.append)
-                p.write_decks(grid)
-
-            if args.guid_clean:
-                p.set_object(args.guid_clean, append_content=args.append)
-                p.write_decks(clean)
+                decks = (grid, clean)
+                guids = args.guid.split(',')
+                for i, guid in enumerate(guids):
+                    if i > 1:
+                        break
+                    p.set_object(guid, append_content=args.append)
+                    p.write_decks(decks[i])
 
     if args.insert_url:
         if not args.game_save:

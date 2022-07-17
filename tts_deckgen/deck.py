@@ -205,7 +205,7 @@ class Deck:
             res.append(f'({w}x{h}): {c}')
         return ', '.join(res)
 
-    def save(self, output_dir, prefix):
+    def save(self, output_dir, prefix, save_cards=True):
         faces = []
         for i, s in enumerate(self.sheets):
             path = os.path.abspath(os.path.join(output_dir, f'{prefix}_sheet_{i:02d}.png'))
@@ -231,8 +231,9 @@ class Deck:
         with open(os.path.join(output_dir, f'{prefix}_deck_info.json'), 'w') as o:
             json.dump(self.saved_sheets, o, default=vars)
 
-        with open(os.path.join(output_dir, f'{prefix}_cards_info.json'), 'w') as o:
-            json.dump(self.cards_info, o)
+        if save_cards:
+            with open(os.path.join(output_dir, f'{prefix}_cards_info.json'), 'w') as o:
+                json.dump(self.cards_info, o)
 
     @classmethod
     def create(cls, images: List[PILImage], info: Optional[List[dict]] = None, back_img=None, back_images=None,
