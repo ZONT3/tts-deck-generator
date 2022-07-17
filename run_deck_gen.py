@@ -12,7 +12,7 @@ from tqdm import tqdm
 import tts_deckgen.image_processing as ip
 import tts_deckgen.save_processing as sp
 import tts_deckgen.deck as d
-from tts_deckgen.properties_editor import edit_properties, write_changes
+import tts_deckgen.properties_editor as pe
 from tts_deckgen.save_processing import SaveProcessor
 
 
@@ -114,13 +114,13 @@ def merge_cards(deck_dir, prefix, into, from_fp):
                 break
         else:
             continue
-        
+
         add[idx] = c['Properties']
 
-    write_changes(os.path.join(deck_dir, f'{prefix}_cards_info.json'), into, add, {})
+    pe.write_changes(d.cards_info_json(deck_dir, prefix), into, add, {})
 
 
-def main():
+def parse_args():
     p = ArgumentParser()
     p.add_argument('-d', '--pics-dir', type=str, default=None, help='Directory to grab pictures from')
     p.add_argument('-D', '--deck-dir', type=str, default=None,
@@ -129,17 +129,21 @@ def main():
                    help='Enter interactive mode for changing files local dirs to URLs. '
                         'Output dir will be used to iterate over files. --game-save must be set')
     p.add_argument('-P', '--properties', action='store_true',
-                   help='Enter properties editor mode. Allows you to interactively edit card\'s properties.'
+                   help='Enter properties editor mode. Allows you to interactively edit card\'s properties. '
                         'Saved deck must be set. Game save and guid are optional. (-D, -s, -g options respectively).')
     p.add_argument('--fix', action='store_true', help='Restores save (-s option) to untouched state')
-    p.add_argument('-m', '--merge', type=str, default=None, help='Merges specified card info into specified with -D option')
+
+    p.add_argument('-m', '--merge', type=str, default=None, help='Merges specified card info JSON file into deck dir specified with -D option')
+    p.add_argument('-x', '--export-excel', type=str, default=None, help='Exports specified (-D) deck cards properties to excel. '
+                                                                       'Output excel file can be modified and imported using -X option')
+    p.add_argument('-X', '--import-excel', type=str, default=None, help='Imports specified excel file into deck (-D). See -x option for more info.')
 
     p.add_argument('-o', '--output', type=str, default='output', help='Output dir')
     p.add_argument('-R', '--no-rejected', action='store_true', help='Do not generate "Rejected" as back')
 
     p.add_argument('-p', '--prefix', type=str, default='grid,clean',
                    help='Deck prefix for -D and/or -P option. Will be prefix for info JSON files. Can be comma-separated list,'
-                   'only has effect if list size is equal to guid (-g) list.')
+                        'only has effect if list size is equal to guid (-g) list.')
 
     p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
     p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save. Can be comma-separated list.')
@@ -151,7 +155,11 @@ def main():
                                                                   'for replacing transparency.')
     p.add_argument('--keep-transparency', action='store_true', help='Keep transparency. Overrides --bg-color option.')
 
-    args = p.parse_args()
+    return p.parse_args()
+
+
+def main():
+    args = parse_args()
 
     if args.keep_transparency:
         args.bg_color = None
@@ -192,33 +200,46 @@ def main():
     if args.deck_dir:
         if not os.path.isdir(args.deck_dir):
             raise AssertionError('--deck-dir does not represent a dir')
-        if not args.game_save and not args.properties and not args.merge:
-            raise AssertionError('--game-save not set')
         if not args.guid and args.game_save:
             raise AssertionError('--guid not set')
 
         prefix_list = args.prefix.split(',')
         cards = d.load_cards_info(args.deck_dir, prefix_list[0])
+        save = True
 
-        if os.path.isfile(args.merge):
+        if args.merge:
+            if not os.path.isfile(args.merge):
+                raise ValueError('--merge is not a file. Must be a cards info JSON.')
             merge_cards(args.deck_dir, prefix_list[0], cards, args.merge)
 
-        save = True
-        if args.properties:
+        elif args.export_excel:
+            xlsx = args.export_excel
+            if not xlsx.endswith('.xlsx'):
+                xlsx = '.'.join([xlsx, 'xlsx'])
+            pe.export_excel(xlsx, cards)
+            return
+        
+        elif args.import_excel:
+            pe.import_excel(args.import_excel, d.cards_info_json(args.deck_dir, prefix_list[0]), cards)
+
+        elif args.properties:
             sheets = d.DeckSheet.load(args.deck_dir, prefix_list[0])
-            save, add, rm = edit_properties(sheets, cards)
+            save, add, rm = pe.edit_properties(sheets, cards)
             if save:
                 for prefix in prefix_list:
-                    write_changes(os.path.join(args.deck_dir, f'{prefix}_cards_info.json'), cards, add, rm)
+                    pe.write_changes(d.cards_info_json(args.deck_dir, prefix), cards, add, rm)
                     break
+
+        else:
+            if not args.game_save:
+                raise AssertionError('--game-save not set')
 
         if save and args.game_save:
             guids = args.guid.split(',')
             for i, guid in enumerate(guids):
-                if len(prefix_list) > i:
-                    deck = d.DeckSheet.load(args.deck_dir, prefix_list[i])
+                deck = d.DeckSheet.load(args.deck_dir, prefix_list[i if len(prefix_list) > i else 0])
                 if len(guids) == len(prefix_list) and i > 0:
-                    if os.path.isfile(os.path.join(args.deck_dir, f'{prefix_list[i]}_cards_info.json')):
+                    if os.path.isfile(d.cards_info_json(args.deck_dir, prefix_list[i])):
                         cards = d.load_cards_info(args.deck_dir, prefix_list[i])
                 p = SaveProcessor(args.game_save)
                 p.set_object(guid, append_content=args.append)

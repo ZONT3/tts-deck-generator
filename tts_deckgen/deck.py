@@ -169,7 +169,7 @@ class DeckSheet:
 
     @classmethod
     def load(cls, directory, prefix):
-        with open(os.path.join(directory, f'{prefix}_deck_info.json')) as fp:
+        with open(deck_info_json(directory, prefix)) as fp:
             info_list = json.load(fp)
         return list(map(lambda info: DeckSheet(info['face_path'], info['back_path'], tuple(info['size']),
                                                info['back_is_hidden'], info['unique_back']), info_list))
@@ -228,11 +228,11 @@ class Deck:
         for f, b, s in zip(faces, backs, self.sheets_sizes):
             self.saved_sheets.append(DeckSheet(f, b, s, not self.has_hide_img, self.back_sheets is not None))
 
-        with open(os.path.join(output_dir, f'{prefix}_deck_info.json'), 'w') as o:
+        with open(deck_info_json(output_dir, prefix), 'w') as o:
             json.dump(self.saved_sheets, o, default=vars)
 
         if save_cards:
-            with open(os.path.join(output_dir, f'{prefix}_cards_info.json'), 'w') as o:
+            with open(cards_info_json(output_dir, prefix), 'w') as o:
                 json.dump(self.cards_info, o)
 
     @classmethod
@@ -316,8 +316,16 @@ def _create_sheet(leftover, width, max_height, card_size, background_color=(255,
         background_color)
 
 
+def deck_info_json(dir, prefix):
+    return os.path.join(dir, f'{prefix}_deck_info.json')
+
+
+def cards_info_json(dir, prefix):
+    return os.path.join(dir, f'{prefix}_cards_info.json')
+
+
 def load_cards_info(directory, prefix):
-    with open(os.path.join(directory, f'{prefix}_cards_info.json')) as fp:
+    with open(cards_info_json(directory, prefix)) as fp:
         res = json.load(fp)
     return res
 

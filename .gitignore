@@ -1,6 +1,7 @@
 # Project specefic
-/output*/
-/input*/
+output*/
+input*/
+io/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

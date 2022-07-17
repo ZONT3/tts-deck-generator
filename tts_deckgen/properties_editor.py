@@ -1,8 +1,9 @@
 import json
 import re
-import sys
 import traceback
 from typing import List, Dict
+
+import pandas as pd
 
 from tts_deckgen.deck import DeckSheet, get_from_sheets
 
@@ -437,3 +438,50 @@ def write_changes(file, cards, add, rm):
 
     with open(file, 'w') as fp:
         json.dump(cards, fp, indent=2)
+
+def export_excel(path, cards):
+    columns = []
+    for c in cards:
+        if 'Properties' not in c:
+            c['Properties'] = {}
+        for p in c['Properties']:
+            if p not in columns:
+                columns.append(str(p))
+    columns = ['Nickname'] + list(sorted(columns))
+
+    rows = []
+    for c in cards:
+        if 'Nickname' not in c:
+            c['Nickname'] = ''
+        row = [c['Nickname']]
+        props = c['Properties']
+        for p in columns[1:]:
+            row.append(props[p] if p in props else '')
+        rows.append(row)
+
+    df = pd.DataFrame(data=rows, columns=columns)
+    df.to_excel(path)
+
+
+def import_excel(path, into_path, into=None):
+    df = pd.read_excel(path, index_col=0, na_filter=False)
+    if into is None:
+        into = [{} for _ in range(len(df))]
+    if len(into) != len(df):
+        raise ValueError(f'Table data length isn\'t equal to original data length ({len(df)} != {len(into)})')
+    
+    for idx, d in df.iterrows():
+        c = into[idx]
+        c['Nickname'] = d.iloc[0]
+        if 'Properties' not in c:
+            c['Properties'] = {}
+        props = c['Properties']
+        for k, v in d.iloc[1:].items():
+            if v == '':
+                if k in props:
+                    del props[k]
+                continue
+            props[k] = v
+
+    with open(into_path, 'w') as f:
+        json.dump(into, f, indent=2)
