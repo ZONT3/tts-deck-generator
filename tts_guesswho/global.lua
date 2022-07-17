@@ -55,7 +55,8 @@ CAT_GENRE = 'Title Genre'
 BOOLEAN_CATEGORIES = {
     ['From Game'] = CAT_SOURCE,
     ['From Collection-RPG Game'] = CAT_SOURCE,
-    ['From Non-Asian Title'] = CAT_SOURCE,
+    ['From non-Asian Title'] = CAT_SOURCE,
+    ['From non-Asian Animation'] = CAT_SOURCE,
     ['From Anime/Manga/Ranobe'] = CAT_SOURCE,
     ['Title Genre - Romance'] = CAT_GENRE,
     ['Title Genre - Harem-Like'] = CAT_GENRE,
@@ -674,11 +675,11 @@ function GW_GAME:ToggleFilters(ply)
         str = str..v
     end
 
-    if was_active and count == 0 then
-        UI.hide("filtersPanel")
-    end
+    print(str)
     UI.setAttribute("filtersPanel", "visibility", str)
-    if not was_active and count == 0 then
+    if str == '' then
+        UI.hide("filtersPanel")
+    elseif not was_active and count == 0 then
         UI.show("filtersPanel")
     end
 end

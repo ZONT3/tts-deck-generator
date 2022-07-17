@@ -29,7 +29,7 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None, bg_co
     pics_face = []
     pics_back = None if no_rejected else []
 
-    listdir = sorted(os.listdir(pics_dir))
+    listdir = sorted(os.listdir(pics_dir), key=lambda x: x.lower())
     for f in tqdm_inst(listdir, total=len(listdir), unit='pic', desc='Preparing pictures'):
         if f.lower().split('.')[-1] in ['jpg', 'jpeg', 'png']:
             name = '.'.join(f.split('.')[0:-1])
@@ -99,6 +99,24 @@ def insert_urls(game_save, output, show=True):
         with open(game_save, 'w') as fout:
             fout.write(buf)
         print('Wrote modified file')
+
+
+def import_excel(args, cards, prefix):
+    _, ch = pe.import_excel(args.import_excel, cards)
+    if len(ch) > 0:
+        for x in ch:
+            old, new = x
+            print(f'\'{old}\' -> \'{new}\'')
+        yn = input(f'Some names have been changed ({len(ch)}). If this number is too big, wrong data '
+                    'might be in the imported file.\nContinue? ([y]/n): ')
+        while True:
+            if yn.lower() in ('y', '', 'yes'):
+                break
+            elif yn.lower() in ('n', 'no'):
+                return
+            yn = input('[y]/n: ')
+    with open(d.cards_info_json(args.deck_dir, prefix), 'w') as f:
+        json.dump(cards, f, indent=2)
 
 
 def merge_cards(deck_dir, prefix, into, from_fp):
@@ -220,7 +238,7 @@ def main():
             return
         
         elif args.import_excel:
-            pe.import_excel(args.import_excel, d.cards_info_json(args.deck_dir, prefix_list[0]), cards)
+            import_excel(args, cards, prefix_list[0])
 
         elif args.properties:
             sheets = d.DeckSheet.load(args.deck_dir, prefix_list[0])

@@ -439,6 +439,7 @@ def write_changes(file, cards, add, rm):
     with open(file, 'w') as fp:
         json.dump(cards, fp, indent=2)
 
+
 def export_excel(path, cards):
     columns = []
     for c in cards:
@@ -463,16 +464,20 @@ def export_excel(path, cards):
     df.to_excel(path)
 
 
-def import_excel(path, into_path, into=None):
+def import_excel(path, into=None):
     df = pd.read_excel(path, index_col=0, na_filter=False)
     if into is None:
         into = [{} for _ in range(len(df))]
     if len(into) != len(df):
         raise ValueError(f'Table data length isn\'t equal to original data length ({len(df)} != {len(into)})')
     
+    changed_nicks = []
     for idx, d in df.iterrows():
         c = into[idx]
-        c['Nickname'] = d.iloc[0]
+        new_nick = d.iloc[0]
+        if 'Nickname' not in c or c['Nickname'] != new_nick:
+            c['Nickname'] = new_nick
+            changed_nicks.append((c['Nickname'], new_nick))
         if 'Properties' not in c:
             c['Properties'] = {}
         props = c['Properties']
@@ -483,5 +488,4 @@ def import_excel(path, into_path, into=None):
                 continue
             props[k] = v
 
-    with open(into_path, 'w') as f:
-        json.dump(into, f, indent=2)
+    return into, changed_nicks
