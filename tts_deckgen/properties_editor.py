@@ -476,8 +476,8 @@ def import_excel(path, into=None):
         c = into[idx]
         new_nick = d.iloc[0]
         if 'Nickname' not in c or c['Nickname'] != new_nick:
-            c['Nickname'] = new_nick
             changed_nicks.append((c['Nickname'], new_nick))
+            c['Nickname'] = new_nick
         if 'Properties' not in c:
             c['Properties'] = {}
         props = c['Properties']

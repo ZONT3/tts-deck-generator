@@ -61,35 +61,65 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None, bg_co
     return grid_deck, clean_deck
 
 
+def yes_no_interact():
+    yn = input('([y]/n): ')
+    while True:
+        if yn.lower() in ('y', '', 'yes'):
+            return True
+        elif yn.lower() in ('n', 'no'):
+            return False
+        yn = input('! [y]/n: ')
+
+
 def insert_urls(game_save, output, show=True):
     with open(game_save, 'r') as sav:
         sav = sav.read()
     buf = sav
 
-    print('Enter URLs for prompted local files replacements.')
-    print('URLs must be urlencoded already!')
-    print('Type "abort" or "a" to abort')
-    for f in os.listdir(output):
-        if f.lower().split('.')[-1] not in ['png', 'jpg', 'jpeg']:
-            print(f'Found not an image file ({f}), skipping...')
-            continue
+    saved_replacement = os.path.join(output, '.url_replace.json')
+    files = [f for f in os.listdir(output) if f.lower().split('.')[-1] in ['png', 'jpg', 'jpeg']]
+    replacements = {}
+
+    if os.path.isfile(saved_replacement):
+        with open(saved_replacement) as f:
+            found = json.load(f)
+        if len(files) == len(found):
+            for k, v in found.items():
+                print(f'{k} -> {v}')
+            print('Found these replacements. Would you like to use it?', end=' ')
+            if yes_no_interact():
+                replacements = found
+
+    read = len(replacements) > 0
+    if not read:
+        print('Enter URLs for prompted local files replacements.')
+        print('URLs must be urlencoded already!')
+        print('Type "abort" or "a" to abort')
+    for f in files:
         fn = os.path.join(output, f)
 
-        if show:
-            img = Image.open(fn)
-            img.show()
+        if not read:
+            if show:
+                img = Image.open(fn)
+                img.show()
 
-        print(f'Replacement for {f}')
-        replacement = input('> ')
+            print(f'Replacement for {f}')
+            replacement = input('> ')
 
-        if replacement in ['a', 'abort']:
-            return
-        if 'https://imgur.com/' in replacement and replacement.lower().split('.')[-1] not in ['jpg', 'png', 'jpeg']:
-            replacement += '.png'
+            if replacement in ['a', 'abort']:
+                return
+            if 'https://imgur.com/' in replacement and replacement.lower().split('.')[-1] not in ['jpg', 'png', 'jpeg']:
+                replacement += '.png'
+
+        else:
+            replacement = replacements[f]
+            print(f'{f} -> \'{replacement}\'', end=': ')
 
         fn = sp.to_file_path(fn).replace('\\', '\\\\')
         out = buf.replace(fn, replacement)
         if hash(out) != hash(buf):
+            if not read:
+                replacements[f] = replacement
             print('Success')
         else:
             print('Not found any occurrences of', fn)
@@ -99,6 +129,9 @@ def insert_urls(game_save, output, show=True):
         with open(game_save, 'w') as fout:
             fout.write(buf)
         print('Wrote modified file')
+        if not read:
+            with open(saved_replacement, 'w') as f:
+                json.dump(replacements, f)
 
 
 def import_excel(args, cards, prefix):
@@ -107,14 +140,10 @@ def import_excel(args, cards, prefix):
         for x in ch:
             old, new = x
             print(f'\'{old}\' -> \'{new}\'')
-        yn = input(f'Some names have been changed ({len(ch)}). If this number is too big, wrong data '
-                    'might be in the imported file.\nContinue? ([y]/n): ')
-        while True:
-            if yn.lower() in ('y', '', 'yes'):
-                break
-            elif yn.lower() in ('n', 'no'):
-                return
-            yn = input('[y]/n: ')
+        print(f'Some names have been changed ({len(ch)}). If this number is too big, wrong data '
+                    'might be in the imported file.\nContinue?', end=' ')
+        if not yes_no_interact():
+            return
     with open(d.cards_info_json(args.deck_dir, prefix), 'w') as f:
         json.dump(cards, f, indent=2)
 
