@@ -20,5 +20,5 @@
     <Text alignment="middleRight">|</Text>
     <Text alignment="lowerCenter">------</Text>
     <Text alignment="upperCenter" class="tip"
-        ><i><b>TIP:</b> You can use custom keys (numpad by default) for selecting pages 1-9</i></Text>
+        ><i><b>TIP:</b> You can use custom keys (numpad by default) for selecting pages 1-9<br/>and custom key 0 for toggling page</i></Text>
 </Panel>

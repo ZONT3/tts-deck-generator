@@ -655,7 +655,6 @@ function GW_GAME:CDeskInitPages(player, cdesk, num_pages)
 end
 
 function GW_GAME:ToggleFilters(ply)
-    local was_active = self.filters_opened[ply] == true
     self.filters_opened[ply] = not self.filters_opened[ply]
 
     local count = 0
@@ -675,12 +674,11 @@ function GW_GAME:ToggleFilters(ply)
         str = str..v
     end
 
-    print(str)
     UI.setAttribute("filtersPanel", "visibility", str)
     if str == '' then
-        UI.hide("filtersPanel")
-    elseif not was_active and count == 0 then
-        UI.show("filtersPanel")
+        UI.setAttribute("filtersPanel", "active", "false")
+    elseif count == 0 then
+        UI.setAttribute("filtersPanel", "active", "true")
     end
 end
 
