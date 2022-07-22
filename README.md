@@ -1,3 +1,18 @@
+- [TTS Deck Generator](#tts-deck-generator)
+  - [Usage](#usage)
+    - [Sheet generation](#sheet-generation)
+    - [Save injection](#save-injection)
+  - [Usage examples](#usage-examples)
+    - [Sheet generation](#sheet-generation-1)
+    - [Deck injection](#deck-injection)
+    - [Attributes (tags) editing](#attributes-tags-editing)
+    - [Discord scrapping](#discord-scrapping)
+  - [TODO](#todo)
+- [Guess Who Scripted](#guess-who-scripted)
+  - [TODO](#todo-1)
+
+<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
+
 # TTS Deck Generator
 
 Python tools for generating decks and uploading into game save
@@ -73,7 +88,7 @@ python run_deck_gen.py -s ~/Library/Tabletop\ Simulator/Saves/TS_Save_7.json -o 
 
 You will be prompted to past a link to every sheet .png file.
 
-### Attributes editing
+### Attributes (tags) editing
 
 You can generate `key: value` pairs in each mapped card description.
 
@@ -155,7 +170,7 @@ Also, your bot should be invited to your guild (server) and must have reading pe
 # Guess Who Scripted
 
 Tabletop Simulator Gamemode.
-[Link to Steam Workshop]()
+[Link to Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=2838958039)
 
 ## TODO
 
@@ -166,8 +181,8 @@ Tabletop Simulator Gamemode.
   - [ ] *Voting and host/promoted confirmation (**Delayed**)*
 - [x] Group switches (for rejecting/flipping)
   - [x] Properties lists
-- [ ] Pages enable/disable
-- [ ] First workshop release
+- [x] Pages enable/disable
+- [x] First workshop release
 
 ---
 

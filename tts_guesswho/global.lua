@@ -307,6 +307,7 @@ function GW_GAME:InitGame()
         if obj then obj.destroyObject() end
     end
 
+    print(self.data.config.one_page)
 
     local card_list = DIAG_Time('LoadCards', function()
         return self:LoadCards()
@@ -335,6 +336,7 @@ function GW_GAME:InitGame()
     UI.show('pickTip')
     UI.show('pickCounter')
 
+    UI.hide('configPane')
     UI.hide('startPick')
     UI.show('pickDone')
 
@@ -1678,7 +1680,7 @@ function onClickToggleAll(ply)
 end
 
 function onToggleOnePage(ply, value)
-    GW_GAME.config.one_page = value
+    GW_GAME.config.one_page = value == "true"
 end
 
 
