@@ -99,7 +99,7 @@ You can generate `key: value` pairs in each mapped card description.
 python run_deck_gen.py -D io/output-06 -x io/table-06
 ```
 
-You can now insert columns into Excel table and save it, or just use, provided `sheet-06.xlsx` from downloaded archive and rename it.
+You can now insert columns into Excel table and save it, or just use provided `sheet-06.xlsx` from downloaded archive and rename it.
 
 B column, in the table, is name of card in the game (**not** binded to a filenames of images, can be changed to anything), 
 A column is the number of files in input dir in alphabet order (case insensitive, **binded** to that order).
@@ -129,14 +129,14 @@ python run_deck_gen.py -s ~/Library/Tabletop\ Simulator/Saves/TS_Save_7.json -D 
 but you will have to delete old cards manually.
 
 **Note 3**: Deck sheets will become **local files** again. Keep it in mind, if you are updating the deck multiple times and use **upload all** in-game feature.
-If you are using `-u` method (Note 1), it will be easier, because you will not have to upload the same files, multiple times, and script offers you to re-use previous URLs.
+If you are using `-u` method (Note 1), it will be easier, because you will not have to upload the same files multiple times, and script offers you to re-use previous URLs.
 
 ### Discord scrapping
 
 You can collect images from the specified Discord channel, using script `run_discord_scrapping.py`
 
 ```sh
-python run_discord_scrapping.py "YOUR_BOT_TOKEN" GUILD_ID CHANNEL_ID "22/07/15 00:00:00"`
+python run_discord_scrapping.py "YOUR_BOT_TOKEN" GUILD_ID CHANNEL_ID "22/07/15 00:00:00"
 ```
 
 This script will collect images from guild (server) with id `GUILD_ID`, channel `CHANNEL_ID`,
@@ -186,7 +186,7 @@ Tabletop Simulator Gamemode.
 
 ---
 
-**Gamemode's features**
+**Gamemode features**
 
 - [ ] Win/lose conditions
 - [ ] Auto-lose timer on wrong rejection (flipping) 
