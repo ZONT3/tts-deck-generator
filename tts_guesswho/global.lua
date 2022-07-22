@@ -307,8 +307,6 @@ function GW_GAME:InitGame()
         if obj then obj.destroyObject() end
     end
 
-    print(self.data.config.one_page)
-
     local card_list = DIAG_Time('LoadCards', function()
         return self:LoadCards()
     end)
