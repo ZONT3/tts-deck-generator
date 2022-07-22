@@ -45,6 +45,12 @@ DEFAULT_CONFIG = {
     shuffle_players_grid = false,
 }
 
+LANG = {}
+LANG.PICKED = 'Players picked:<br/><b>%d / %d</b>'
+LANG.ONLY_PICKED = 'Start with only picked players (%d/%d)'
+LANG.RANDOM_ALL = 'Pick random for all players and start'
+LANG.RANDOM_OTHER = 'Pick random for all players, who didn\'t pick (%d) and start'
+
 CATEGORIES_ALIASES = {
     ['From Title'] = 'Title'
 }
@@ -102,7 +108,7 @@ function TblShallowCopy(t)
     return t2
 end
 
-function TableLength(t)
+function TblLength(t)
     local count = 0
     for _ in pairs(t) do count = count + 1 end
     return count
@@ -155,6 +161,11 @@ function PropertiesToTable(str)
         tbl[kv[1]] = kv[2] and TrimStr(kv[2]) or true
     end
     return tbl
+end
+
+function SetTooltip(id, text)
+    UI.setAttribute(id, 'tooltip', text)
+    UI.setAttribute(id, 'textColor', '#F0F0F0')
 end
 
 
@@ -313,20 +324,38 @@ function GW_GAME:InitGame(config)
 
     UI.show('pickTip')
     UI.show('pickCounter')
-    UI.setValue("pickCounter", string.format("Players picked:<br/><b>0 / %d</b>", #Player.getPlayers()))
+
+    UI.hide('startPick')
+    UI.show('pickDone')
+
+    UI.hide('onlyPicked')
+    UI.hide('randAll')
+
+    UI.setValue('pickCounter', string.format(LANG.PICKED, 0, #Player.getPlayers()))
+    SetTooltip('startNow', LANG.RANDOM_ALL)
+    SetTooltip('randAll', LANG.RANDOM_ALL)
 
     self.data.init_done = true
 end
 
-function GW_GAME:StartGame(randomize)
+function GW_GAME:PickDone(type)
+    if TblLength(self.prepared_players or {}) == 0 then
+        self:StartGame(true, true)
+    else
+        self:StartGame(type > 1, type == 2)
+    end
+
+    UI.hide('pickDone')
+    UI.hide('pickCounter')
+    UI.hide('pickTip')
+end
+
+function GW_GAME:StartGame(randomize, all)
     self.data.stage = STAGE_PLAY
 
     self:HidePickUI()
-    UI.hide("pickCounter")
-    UI.hide('pickTip')
-
     DIAG_Time('InitPlayers', function()
-        self:InitPlayers(randomize)
+        self:InitPlayers(randomize, all)
     end)
 
     DIAG_Time('UiInitFilters', function()
@@ -337,11 +366,11 @@ function GW_GAME:StartGame(randomize)
     self.data.game_started = true
 end
 
-function GW_GAME:InitPlayers(randomize)
+function GW_GAME:InitPlayers(randomize, all)
     local cards = self:GetCardList()
     for _, p in ipairs(Player.getPlayers()) do
         local name = self.data.prepared_players[p.color]
-        if not name and randomize then
+        if all or not name and randomize then
             name = cards[math.random(#cards)]:GetName()
         end
 
@@ -433,7 +462,6 @@ function GW_GAME:PlayerBlindfoldChanged(states)
             picked = picked + 1
         end
     end
-    UI.setValue("pickCounter", string.format("Players picked:<br/><b>%d / %d</b>", picked, total))
     local all_picked = picked >= total
 
     if self.data.picking_player and not states[self.data.picking_player] then
@@ -492,9 +520,8 @@ function GW_GAME:UpdPickDeck()
         local names = {}
 
         for _, d in ipairs(self.data.picked_now) do
-            names[d.name] = true
+            table.insert(names, d.name)
         end
-        names = FlipKV(names)
 
         if self.data.picking_player and #objs > 0 then
             local result = names[math.random(#names)]
@@ -516,7 +543,39 @@ function GW_GAME:UpdPickDeck()
                 deck.putObject(obj)
             end
         end
+
+        self:UpdPicked()
     end)
+end
+
+function GW_GAME:UpdPicked()
+    local total = 0
+    local picked = 0
+    for _, ply in ipairs(Player.getPlayers()) do
+        total = total + 1
+        if self.data.prepared_players[ply.color] then
+            picked = picked + 1
+        end
+    end
+    local all_picked = picked >= total
+
+    UI.setValue("pickCounter", string.format(LANG.PICKED, picked, total))
+
+    if all_picked then
+        SetTooltip("startNow", "")
+        UI.show("randAll")
+        UI.hide("onlyPicked")
+    elseif picked > 0 then
+        SetTooltip("startNow", LANG.RANDOM_OTHER:format(total - picked))
+        UI.show("randAll")
+        UI.show("onlyPicked")
+    else
+        SetTooltip("startNow", LANG.RANDOM_ALL)
+        UI.hide("randAll")
+        UI.hide("onlyPicked")
+    end
+
+    SetTooltip('onlyPicked', LANG.ONLY_PICKED:format(picked, total))
 end
 
 function GW_GAME:ShowPickUI(picking_player)
@@ -751,7 +810,7 @@ function GW_GAME:UiInitFilters()
                 table.insert(panel_childs, panel)
             end
 
-            local columns = math.ceil(TableLength(map) / FILTER_CELL_CH)
+            local columns = math.ceil(TblLength(map) / FILTER_CELL_CH)
             local width = columns * FILTER_CELL_WIDTH + (columns - 1) * 4
 
             local filter_pane = ply_panels[ply]
@@ -1513,20 +1572,20 @@ end
 
 -- BUTTONS
 
-function onClickStartGame()
+function onClickStartPick()
     GW_GAME:InitGame()
-    UI.hide('startGame')
-    UI.show('pickDone')
 end
 
 function onClickPickDone()
-    GW_GAME:StartGame()
-    UI.hide('pickDone')
+    GW_GAME:PickDone(2)
 end
 
-function onClickPickDoneRand()
-    GW_GAME:StartGame(true)
-    UI.hide('pickDone')
+function onClickOnlyPicked()
+    GW_GAME:PickDone(1)
+end
+
+function onClickRandAll()
+    GW_GAME:PickDone(3)
 end
 
 function onClickFilters(ply)
@@ -1593,8 +1652,11 @@ function onPlayerAction(player, action, targets)
 end
 
 function onObjectDrop(player, obj)
-    updPickDeck()
-    if not GW_GAME.data.game_started then return end
+    if not GW_GAME.data.game_started then
+        updPickDeck()
+        return
+    end
+
     if GW_GAME:CanPlayerFlip(player, obj) then
         GW_GAME:OnPlayerFlippedObj(player, obj, false)
     end

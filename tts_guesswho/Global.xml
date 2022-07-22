@@ -4,11 +4,8 @@
         colors="#282828|#E18D15|#8E8E8E|#8E8E8E"
         textColor="#F0F0F0" />
     <Button class="start" 
-        visibility="Admin"
         width="200"
         height="60"
-        rectAlignment="LowerCenter"
-        offsetXY="0 20"
         fontStyle="Bold" />
     <Button class="small"
         height="20"
@@ -22,15 +19,28 @@
         color="#FFFFFF"/>
 </Defaults>
 
-<Button id="startGame" class="start" onclick="onClickStartGame">Start Picking</Button>
+<Button id="startPick" class="start" 
+    visibility="Admin" 
+    offsetXY="0 20"
+    rectAlignment="LowerCenter"
+    onclick="onClickStartPick">Start Picking</Button>
 <Panel id="pickDone" active="false"
+    visibility="Admin"
     rectAlignment="LowerCenter"
     offsetXY="0 20"
     width="200"
     height="110">
-    <Button class="start" onclick="onClickPickDone" offsetXY="0 0">Start Game</Button>
-    <Button class="start small" onclick="onClickPickDoneRand" offsetXY="0 65">Randomize unpicked</Button>
-    <Button class="start small" onclick="onClickPickDoneRand" interactable="false" offsetXY="0 90">Randomize all</Button>
+    <VerticalLayout 
+        rectAlignment="LowerCenter"
+        childAlignment="LowerCenter"
+        spacing="5"
+        offsetXY="0 65"
+        width="200"
+        height="45">
+        <Button id="randAll" class="start small" tooltip="" onclick="onClickRandAll">Randomize all</Button>
+        <Button id="onlyPicked" class="start small" tooltip="" onclick="onClickOnlyPicked">Only picked</Button>
+    </VerticalLayout>
+    <Button id="startNow" class="start" tooltip="" rectAlignment="LowerCenter" onclick="onClickPickDone">Start Game</Button>
 </Panel>
 
 <Text id="pickTip" active="false"
@@ -44,6 +54,7 @@
 <Button id="openFilters" class="square" active="false"
     rectAlignment="LowerRight"
     offsetXY="-8 100"
+    fontSize="12"
     onclick="onClickFilters">Filters</Button>
 
 <Panel active="false" id="filtersPanel"
