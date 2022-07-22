@@ -35,6 +35,10 @@
         "onClickStartGame",
         "onSave",
         "onLoad",
-        "onClickFilters"
+        "onClickFilters",
+        "createButtonCategory",
+        "createFilterPane",
+        "createFilterGrid",
+        "onClickToggleAll"
     ]
 }

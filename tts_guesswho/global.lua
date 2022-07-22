@@ -784,9 +784,10 @@ function GW_GAME:UiInitFilters()
                 local text = display_name.." ("..#list..")"
                 local fnc_name = "toggleFilter_"..cat_idx.."_"..x_idx.."_"..ply
                 local fnc_name_second = fnc_name.."_second"
+                local fnc_second_id = cat_idx.."_"..x_idx
 
                 _G[fnc_name] = function() self:ToggleCards(ply, list) end
-                _G[fnc_name_second] = function() self:ToggleCards(ply, list, true) end
+                _G[fnc_name_second] = function() self:ToggleCards(ply, list, fnc_second_id) end
                 table.insert(filter_btns, createButtonFilter(text, fnc_name, fnc_name_second))
                 x_idx = x_idx + 1
             end
@@ -817,11 +818,11 @@ function GW_GAME:ExposeFilters(ply, cat_idx)
     UI.show(cur_id)
 end
 
-function GW_GAME:ToggleCards(ply, list, invert)
+function GW_GAME:ToggleCards(ply, list, inclusive)
     local on_table = self:GetCardsOnTable(ply)
     local data = self:PlayerData(ply)
 
-    if not invert then
+    if not inclusive then
         local new_state = false
         for _, name in ipairs(list) do
             if not data.card_states[name] then
@@ -835,21 +836,18 @@ function GW_GAME:ToggleCards(ply, list, invert)
         end
 
     else
+        local same = data.last_inclusice == inclusive
+        local invert = same
+
         local map = {}
         for _, name in ipairs(list) do
             map[name] = true
         end
 
-        local new_state = false
-        for name, state in pairs(data.card_states) do
-            if not map[name] then
-                if not state then
-                    new_state = true
-                    break
-                end
-            else
-                if state then
-                    new_state = true
+        if same then
+            for name, state in pairs(data.card_states) do
+                if (map[name] ~= nil) == state then
+                    invert = false
                     break
                 end
             end
@@ -857,12 +855,14 @@ function GW_GAME:ToggleCards(ply, list, invert)
 
         for name, _ in pairs(data.card_states) do
             if not map[name] then
-                self:ToggleCard(ply, name, new_state, on_table)
-            else
-                self:ToggleCard(ply, name, not new_state, on_table)
+                self:ToggleCard(ply, name, not invert, on_table)
+            elseif same then
+                self:ToggleCard(ply, name, invert, on_table)
             end
         end
     end
+
+    data.last_inclusice = inclusive or nil
 end
 
 function GW_GAME:ToggleCard(ply, name, new_state, on_table_list)
