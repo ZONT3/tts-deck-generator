@@ -58,7 +58,7 @@ This will inject sheets ito a deck. If you don't wont to override original decks
 python run_deck_gen.py -s ~/Library/Tabletop\ Simulator/Saves/TS_Save_7.json -D io/output-06 -g c2a0c2,a785c2 -a
 ```
 
-**Note**
+**Note 1**
 
 Decks will use your sheets as **local files**. 
 You can use in-game feature **upload all to Steam Cloud**, 
@@ -88,7 +88,7 @@ You can now insert columns into Excel table and save it, or just use provided `s
 
 B column in table is name of card in game (**not** binded to a filenames of images, can be changed to anything), 
 A column is number of file in input dir in alphabet order (case insensetive, **binded** to that order).
-C and any leftover columns is keys in descriptions, row values are values.
+C and any leftover columns are keys in descriptions, row values are values.
 If value is equal `true`, then it will be just key in description, without any value.
 Empty value in table will not include key name in card description.
 
@@ -110,11 +110,11 @@ Or do both actions in one command:
 python run_deck_gen.py -s ~/Library/Tabletop\ Simulator/Saves/TS_Save_7.json -D io/output-06 -g c2a0c2,a785c2 -X io/table-06.xlsx
 ```
 
-**Note 1**: You can override the whole deck in order to update attributes. If it's not ok, you can append new cards to it using `-a` option,
+**Note 2**: You can override the whole deck in order to update attributes. If it's not ok, you can append new cards to it using `-a` option,
 but you will have to delete old cards manually.
 
-**Note 2**: Deck sheets will become **local files** again. Keep it in mind, if you are updating deck multiple times and use **upload all** in-game feature.
-If you are using `-u` method (example above), it will be easier because you will not have to upload same files multiple times, and script offers you to re-use previous URLs.
+**Note 3**: Deck sheets will become **local files** again. Keep it in mind, if you are updating deck multiple times and use **upload all** in-game feature.
+If you are using `-u` method (Note 1), it will be easier because you will not have to upload same files multiple times, and script offers you to re-use previous URLs.
 
 ### Discord scrapping
 
