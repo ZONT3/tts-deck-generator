@@ -3,6 +3,8 @@
         fontSize="24"
         colors="#282828|#E18D15|#8E8E8E|#8E8E8E"
         textColor="#F0F0F0" />
+    <Toggle
+        textColor="#F0F0F0" />
     <Button class="start" 
         width="200"
         height="60"
@@ -33,14 +35,15 @@
     <VerticalLayout 
         rectAlignment="LowerCenter"
         childAlignment="LowerCenter"
+        visibility="Admin"
         spacing="5"
         offsetXY="0 65"
         width="200"
         height="45">
-        <Button id="randAll" class="start small" tooltip="" onclick="onClickRandAll">Randomize all</Button>
-        <Button id="onlyPicked" class="start small" tooltip="" onclick="onClickOnlyPicked">Only picked</Button>
+        <Button id="randAll" visibility="Admin" class="start small" tooltip="" onclick="onClickRandAll">Randomize all</Button>
+        <Button id="onlyPicked" visibility="Admin" class="start small" tooltip="" onclick="onClickOnlyPicked">Only picked</Button>
     </VerticalLayout>
-    <Button id="startNow" class="start" tooltip="" rectAlignment="LowerCenter" onclick="onClickPickDone">Start Game</Button>
+    <Button id="startNow" visibility="Admin" class="start" tooltip="" rectAlignment="LowerCenter" onclick="onClickPickDone">Start Game</Button>
 </Panel>
 
 <Text id="pickTip" active="false"
@@ -60,8 +63,8 @@
 <Panel active="false" id="filtersPanel"
     width="40%"
     height="30%"
-    rectAlignment="lowerRight"
-    offsetXY="-100 10">
+    rectAlignment="LowerRight"
+    offsetXY="-8 200">
     <Button class="square" id="toggleAll"
         fontSize="12"
         width="32"

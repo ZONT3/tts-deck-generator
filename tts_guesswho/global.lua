@@ -43,6 +43,8 @@ PLAYER_MAPPING_ID2K = {
 
 DEFAULT_CONFIG = {
     shuffle_players_grid = false,
+    shuffle_grid = true,
+    one_page = true,
 }
 
 LANG = {}
@@ -130,6 +132,14 @@ function FlipKV(tbl, fill_instead)
                 tmp[v] = k
             end
         end
+    end
+    return tmp
+end
+
+function TblValCount(tbl)
+    local tmp = {}
+    for _, v in pairs(tbl) do
+        tmp[v] = (tmp[v] or 0) + 1
     end
     return tmp
 end
@@ -269,8 +279,9 @@ STAGE_PLAY = 2
 
 GW_GAME = {}
 GW_GAME.data = {}
+GW_GAME.config = {}
 
-function GW_GAME:InitGame(config)
+function GW_GAME:InitGame()
     log(' ==== GW Game Init ==== ')
     self.data.init_done = false
     self.data.game_started = false
@@ -288,9 +299,8 @@ function GW_GAME:InitGame(config)
     end
     self.objects = {}
 
-    config = config or {}
-    TblAdd(config, DEFAULT_CONFIG, true)
-    self.data.config = config
+    TblAdd(self.config, DEFAULT_CONFIG, true)
+    self.data.config = self.config
 
     for _, guid in ipairs(GUIDS_REMOVE_AT_START) do
         local obj = getObjectFromGUID(guid)
@@ -308,7 +318,7 @@ function GW_GAME:InitGame(config)
         self:InitCards(card_list)
     end)
     DIAG_Time('InitFilters', function()
-        self.data.filters, self.data.filter_categories = self:InitFilters(card_list)
+        self.data.filters, self.data.filter_categories, self.data.filter_order = self:InitFilters(card_list)
     end)
     DIAG_Time('GenerateCardsCache', function()
         self.data.cards_cache = self:GenerateCardsCache(card_list)
@@ -339,10 +349,10 @@ function GW_GAME:InitGame(config)
 end
 
 function GW_GAME:PickDone(type)
-    if TblLength(self.prepared_players or {}) == 0 then
+    if TblLength(self.data.prepared_players or {}) == 0 then
         self:StartGame(true, true)
     else
-        self:StartGame(type > 1, type == 2)
+        self:StartGame(type >= 2, type == 3)
     end
 
     UI.hide('pickDone')
@@ -367,19 +377,18 @@ function GW_GAME:StartGame(randomize, all)
 end
 
 function GW_GAME:InitPlayers(randomize, all)
-    local cards = self:GetCardList()
     for _, p in ipairs(Player.getPlayers()) do
         local name = self.data.prepared_players[p.color]
         if all or not name and randomize then
-            name = cards[math.random(#cards)]:GetName()
+            name = true
         end
 
         if name then
-            self:InitPlayer(p.color, name)
+            name = self:InitPlayer(p.color, name)
             self:SetPage(p.color, 1)
             for _, pp in ipairs(Player.getPlayers()) do
                 if p.color ~= pp.color then
-                    local obj = self:DuplicateHandCard(self:FindCard(name, cards))
+                    local obj = self:DuplicateHandCard(self:FindCard(name, self.cards_ordered))
                     obj.setName('['..Color.fromString(p.color):toHex(false)..']'..obj.getName())
                     obj.setDescription(p.steam_name.."'s guess target\n\n"..obj.getDescription())
                     obj.deal(1, pp.color)
@@ -391,12 +400,6 @@ end
 
 function GW_GAME:InitPlayer(player, card_name)
     local data = {}
-
-    data.card_name = card_name
-    data.card_states = self:InitCardStates()
-    data.cards_ordered = self:GetCardNamesOrdered(data.card_states)
-    data.displayed = {}
-    data.page = 0
 
     local pl_id = PLAYER_MAPPING_K2ID[player]
     local rotate = true
@@ -410,10 +413,30 @@ function GW_GAME:InitPlayer(player, card_name)
     local h = math.floor(zh / card_h)
     data.grid = self:GenerateGridPoints(zone.tl, zone.br, w, h)
 
-    self.objects['cdesk:'..player] = self:SpawnControlDesk(player)
-    self:InitControlDesk(player, math.ceil(#data.cards_ordered / #data.grid))
+    self.data.page_len = self.data.page_len and math.min(self.data.page_len, #data.grid) or #data.grid
+
+    if not self.cards_ordered then
+        self.cards_ordered = self:InitCardsOrdered()
+    end
+
+    if card_name == true then
+        card_name = self.cards_ordered[math.random(#self.cards_ordered)]:GetName()
+    end
+
+    data.card_name = card_name
+    data.cards_ordered = self:InitPlyCardsOrdered(self.cards_ordered)
+    data.card_states = self:InitCardStates(self.cards_ordered)
+    data.displayed = {}
+    data.page = 0
+
+    if not self.data.config.one_page then
+        self.objects['cdesk:'..player] = self:SpawnControlDesk(player)
+        self:InitControlDesk(player, math.ceil(#data.cards_ordered / #data.grid))
+    end
 
     self.data.players[player] = data
+
+    return card_name
 end
 
 function GW_GAME:InitZones()
@@ -743,6 +766,7 @@ end
 
 function GW_GAME:InitFilters(card_list)
     local cat_map = {}
+    local filter_order = {}
 
     for _, card in ipairs(card_list) do
         local properties = TblShallowCopy(card.properties)
@@ -765,11 +789,14 @@ function GW_GAME:InitFilters(card_list)
                 end
                 if not cat_map[cur_cat][cur_f] then
                     cat_map[cur_cat][cur_f] = {}
+                    table.insert(filter_order, cur_f)
                 end
                 table.insert(cat_map[cur_cat][cur_f], card:GetName())
             end
         end
     end
+
+    table.sort(filter_order)
 
     local cat_order = {}
     for cat, _ in pairs(cat_map) do
@@ -783,7 +810,7 @@ function GW_GAME:InitFilters(card_list)
         table.insert(cat_order, CAT_OTHER)
     end
 
-    return cat_map, cat_order
+    return cat_map, cat_order, filter_order
 end
 
 function GW_GAME:UiInitFilters()
@@ -827,28 +854,31 @@ function GW_GAME:UiInitFilters()
 
             local filter_btns = {}
             local x_idx = 1
-            for filter, list in pairs(map) do
-                local display_name = nil
-                local test = cat.." - "
-                if not StartsWith(filter, test) then
-                    test = cat
+            for _, filter in ipairs(self.data.filter_order) do
+                local list = map[filter]
+                if list then
+                    local display_name = nil
+                    local test = cat.." - "
                     if not StartsWith(filter, test) then
-                        display_name = filter
+                        test = cat
+                        if not StartsWith(filter, test) then
+                            display_name = filter
+                        end
                     end
-                end
-                if not display_name then
-                    display_name = string.sub(filter, #test + 1)
-                end
+                    if not display_name then
+                        display_name = string.sub(filter, #test + 1)
+                    end
 
-                local text = display_name.." ("..#list..")"
-                local fnc_name = "toggleFilter_"..cat_idx.."_"..x_idx.."_"..ply
-                local fnc_name_second = fnc_name.."_second"
-                local fnc_second_id = cat_idx.."_"..x_idx
+                    local text = display_name.." ("..#list..")"
+                    local fnc_name = "toggleFilter_"..cat_idx.."_"..x_idx.."_"..ply
+                    local fnc_name_second = fnc_name.."_second"
+                    local fnc_second_id = cat_idx.."_"..x_idx
 
-                _G[fnc_name] = function() self:ToggleCards(ply, list) end
-                _G[fnc_name_second] = function() self:ToggleCards(ply, list, fnc_second_id) end
-                table.insert(filter_btns, createButtonFilter(text, fnc_name, fnc_name_second))
-                x_idx = x_idx + 1
+                    _G[fnc_name] = function() self:ToggleCards(ply, list) end
+                    _G[fnc_name_second] = function() self:ToggleCards(ply, list, fnc_second_id) end
+                    table.insert(filter_btns, createButtonFilter(text, fnc_name, fnc_name_second))
+                    x_idx = x_idx + 1
+                end
             end
 
             filter_grid.children = filter_btns
@@ -1082,9 +1112,9 @@ function GW_GAME:PlayerData(ply)
     return self.data.players[ply]
 end
 
-function GW_GAME:InitCardStates()
+function GW_GAME:InitCardStates(list)
     local res = {}
-    for _, card in ipairs(self:GetCardList()) do
+    for _, card in ipairs(list) do
         res[card:GetName()] = false
     end
     return res
@@ -1218,20 +1248,67 @@ function GW_GAME:FromCardsCache(tbl)
     return res
 end
 
-function GW_GAME:GetCardNamesOrdered(card_set)
+function GW_GAME:InitCardsOrdered()
+    local list = self:GetCardList()
+    local shuffle = self.data.config.shuffle_grid
+
+    if shuffle then
+        local weighted = {}
+        for _, card in ipairs(list) do
+            local name = card:GetName()
+            weighted[name] = math.random()
+        end
+        table.sort(list, function(a, b) return weighted[a:GetName()] < weighted[b:GetName()] end)
+    end
+
+    if self.data.config.one_page then
+        local res = {}
+        local map = TblValCount(self.data.prepared_players)
+        local plys = TblLength(self.data.prepared_players)
+        local count = math.min(self.data.page_len, #list)
+
+        for i, card in ipairs(list) do
+            local name = card:GetName()
+            local mapped = map[name] or 0
+            if i <= count - plys or mapped > 0 then
+                if mapped then
+                    plys = plys - mapped
+                end
+
+                local x = #res
+                table.insert(res, x > 1 and math.random(x) or 1, card)
+            end
+            if #res >= count then
+                break
+            end
+        end
+
+        return res
+    else
+        return list
+    end
+end
+
+function GW_GAME:InitPlyCardsOrdered(list)
     local shuffle = self.data.config.shuffle_players_grid
     if not shuffle and self.data.static_order then
         return self.data.static_order
-    else
-        local weighted = {}
-        local sorted = {}
-        for k, _ in pairs(card_set) do
-            weighted[k] = math.random()
-            table.insert(sorted, k)
-        end
-        table.sort(sorted, function(a, b) return weighted[a] < weighted[b] end)
 
-        if not shuffle then
+    else
+        local sorted = {}
+        if shuffle then
+            local weighted = {}
+            for _, card in ipairs(list) do
+                local k = card:GetName()
+                weighted[k] = math.random()
+                table.insert(sorted, k)
+            end
+            table.sort(sorted, function(a, b) return weighted[a] < weighted[b] end)
+
+        else
+            for _, card in ipairs(list) do
+                table.insert(sorted, card:GetName())
+            end
             self.data.static_order = sorted
         end
 
@@ -1600,6 +1677,10 @@ function onClickToggleAll(ply)
     GW_GAME:ToggleCards(ply.color, list)
 end
 
+function onToggleOnePage(ply, value)
+    GW_GAME.config.one_page = value
+end
+
 
 -- EVENTS
 
@@ -1616,6 +1697,7 @@ end
 
 function onScriptingButtonUp(index, color)
     if not GW_GAME.data.game_started then return end
+    if GW_GAME.data.config.one_page then return end
     GW_GAME:SetPage(color, index < 10 and index or nil)
 end
 
