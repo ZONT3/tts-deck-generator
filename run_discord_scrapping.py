@@ -1,10 +1,11 @@
+from fileinput import filename
 import os.path
 from argparse import ArgumentParser
 from datetime import datetime
 
 import discord
 
-time_format = '%d/%m/%y %H:%M:%S'
+time_format = '%y/%m/%d %H:%M:%S'
 
 if __name__ == '__main__':
     p = ArgumentParser()
@@ -12,7 +13,7 @@ if __name__ == '__main__':
     p.add_argument('guild_id', type=int, help='Target guild id')
     p.add_argument('channel_id', type=int, help='Target channel id')
     p.add_argument('timestamp', type=str, help=f'Timestamp after which scrap messages, in format {time_format}')
-    p.add_argument('-o', '--output', type=str, default='output', help=f'Output dir')
+    p.add_argument('-o', '--output', type=str, default='discord-collected', help=f'Output dir')
 
     args = p.parse_args()
 
@@ -38,7 +39,13 @@ if __name__ == '__main__':
                         else:
                             name = f'[{msg.id}00{i}] {a.filename}'
 
-                        await a.save(os.path.join(args.output, name))
+                        fn = os.path.join(args.output, name)
+                        i = 1
+                        while os.path.isfile(fn):
+                            fn = os.path.join(args.output, f'[{i}] {name}')
+                            i += 1
+
+                        await a.save(fn)
                     print('saved.')
                 else:
                     print(f'Not found attachments')
