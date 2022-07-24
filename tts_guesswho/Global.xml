@@ -80,6 +80,22 @@
     </VerticalScrollView>
 </Panel>
 
+<VerticalLayout id="configPane"
+    width="120"
+    height="20"
+    rectAlignment="LowerCenter"
+    offsetXY="0 115"
+    visibility="Admin">
+    <Toggle
+        visibility="Admin"
+        isOn="true"
+        onValueChanged="onToggleOnePage"
+        tooltipPosition="Above"
+        tooltip="Unckeck if you want to use whole deck splitted into pages. Have performance issues for now, game may freeze/stutter while switching pages. Use if not afraid of this."
+    >Only one page</Toggle>
+</VerticalLayout>
+
+
 <!-- 
 button_normal             #282828
 button_hover              #E18D15
