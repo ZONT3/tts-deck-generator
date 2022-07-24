@@ -1,45 +1,19 @@
+--[[  Field Settings  ]]
+
 GAME_ZONE_TL = Vector(-35.60, 1.48, 71.70)
-GAME_ZONE_BR = Vector(35.60, 1.48, -71.7)
+GAME_ZONE_BR = Vector(35.60, 1.48, -71.70)
 GAME_ZONE_W = 2
 GAME_ZONE_H = 5
 
-PLAYER_ZONE_MARGIN = 1.0
-
-CARD_W = 2.0
-CARD_H = 3.0
-CARD_MIN_MARGIN = 0.1 -- can be negative to enable overlapping
-CARD_OVERLAP_STEP = 0.02 -- height to lift each new card
-
-GUID_GRID_DECK_ZONE = '41563e'
-GUID_HAND_DECK_ZONE = '3a3afd'
-GUID_START_BUTTON = '35e1ac'
-GUID_OPERATING_TABLE = 'a7d1ba'
-
-GUIDS_REMOVE_AT_START = {'893b37'}
-
-POS_OPERATING_TABLE = Vector({0.00, -2, 85.77})
-
-CONTROL_TABLE_ELEVATION = -0.95
-CONTROL_TABLE_SIZE_KOEF = 500
-CONTROL_TABLE_W = 27
-CONTROL_TABLE_H = 16.8
-
-FILTER_CELL_WIDTH = 300
-FILTER_CELL_HEIGHT = 32
-FILTER_CELL_CW = 2
-FILTER_CELL_CH = 8
-
-FILTER_PANE_WIDTH = (FILTER_CELL_CW * FILTER_CELL_WIDTH + (FILTER_CELL_CW - 1) * 4) / 0.7
-FILTER_PANE_HEIGHT = (FILTER_CELL_CH * FILTER_CELL_HEIGHT + (FILTER_CELL_CH - 1) * 4) / 0.9
-FILTER_PANE_BUTTONS_SIZE = FILTER_PANE_HEIGHT * 0.05
-
-ENABLE_ZERO_PAGE = false
-
 PLAYER_MAPPING_ID2K = {
-    'White', 'Brown', 'Red', 
-    'Orange', 'Yellow', 'Green', 
+    'White', 'Brown', 'Red',
+    'Orange', 'Yellow', 'Green',
     'Teal', 'Blue', 'Purple', 'Pink'
 }
+
+--[[ Gane config ]]
+
+ENABLE_ZERO_PAGE = false
 
 DEFAULT_CONFIG = {
     shuffle_players_grid = false,
@@ -47,11 +21,7 @@ DEFAULT_CONFIG = {
     one_page = true,
 }
 
-LANG = {}
-LANG.PICKED = 'Players picked:<br/><b>%d / %d</b>'
-LANG.ONLY_PICKED = 'Start with only picked players (%d/%d)'
-LANG.RANDOM_ALL = 'Pick random for all players and start'
-LANG.RANDOM_OTHER = 'Pick random for all players, who didn\'t pick (%d) and start'
+--[[  Pack config  ]]
 
 CATEGORIES_ALIASES = {
     ['From Title'] = 'Title'
@@ -69,6 +39,52 @@ BOOLEAN_CATEGORIES = {
     ['Title Genre - Romance'] = CAT_GENRE,
     ['Title Genre - Harem-Like'] = CAT_GENRE,
 }
+
+--[[  Advanced field settings  ]]
+
+PLAYER_ZONE_MARGIN = 1.0
+
+CARD_W = 2.0
+CARD_H = 3.0
+CARD_MIN_MARGIN = 0.1 -- can be negative to enable overlapping
+CARD_OVERLAP_STEP = 0.02 -- height to lift each new card
+
+--[[  Objects  ]]
+
+GUID_GRID_DECK_ZONE = '41563e'
+GUID_HAND_DECK_ZONE = '3a3afd'
+GUID_START_BUTTON = '35e1ac'
+GUID_OPERATING_TABLE = 'a7d1ba'
+
+GUIDS_REMOVE_AT_START = {'893b37'}
+
+--[[  UI settings  ]]
+
+FILTER_CELL_WIDTH = 300
+FILTER_CELL_HEIGHT = 32
+FILTER_CELL_CW = 2
+FILTER_CELL_CH = 8
+
+FILTER_PANE_WIDTH = (FILTER_CELL_CW * FILTER_CELL_WIDTH + (FILTER_CELL_CW - 1) * 4) / 0.7
+FILTER_PANE_HEIGHT = (FILTER_CELL_CH * FILTER_CELL_HEIGHT + (FILTER_CELL_CH - 1) * 4) / 0.9
+FILTER_PANE_BUTTONS_SIZE = FILTER_PANE_HEIGHT * 0.05
+
+--[[  System  ]]
+
+POS_OPERATING_TABLE = Vector({0.00, -2, 85.77})
+
+CONTROL_TABLE_ELEVATION = -0.95
+CONTROL_TABLE_SIZE_KOEF = 500
+CONTROL_TABLE_W = 27
+CONTROL_TABLE_H = 16.8
+
+--[[  Lang  ]]
+
+LANG = {}
+LANG.PICKED = 'Players picked:<br/><b>%d / %d</b>'
+LANG.ONLY_PICKED = 'Start with only picked players (%d/%d)'
+LANG.RANDOM_ALL = 'Pick random for all players and start'
+LANG.RANDOM_OTHER = 'Pick random for all players, who didn\'t pick (%d) and start'
 
 
 function DIAG_Time(label, fnc)
@@ -341,7 +357,7 @@ function GW_GAME:InitGame()
     UI.hide('onlyPicked')
     UI.hide('randAll')
 
-    UI.setValue('pickCounter', string.format(LANG.PICKED, 0, #Player.getPlayers()))
+    UI.setValue('pickCounter', string.format(LANG.PICKED, 0, #self:GetPlayers()))
     SetTooltip('startNow', LANG.RANDOM_ALL)
     SetTooltip('randAll', LANG.RANDOM_ALL)
 
@@ -377,7 +393,7 @@ function GW_GAME:StartGame(randomize, all)
 end
 
 function GW_GAME:InitPlayers(randomize, all)
-    for _, p in ipairs(Player.getPlayers()) do
+    for _, p in ipairs(self:GetPlayers()) do
         local name = self.data.prepared_players[p.color]
         if all or not name and randomize then
             name = true
@@ -386,7 +402,7 @@ function GW_GAME:InitPlayers(randomize, all)
         if name then
             name = self:InitPlayer(p.color, name)
             self:SetPage(p.color, 1)
-            for _, pp in ipairs(Player.getPlayers()) do
+            for _, pp in ipairs(self:GetPlayers()) do
                 if p.color ~= pp.color then
                     local obj = self:DuplicateHandCard(self:FindCard(name, self.cards_ordered))
                     obj.setName('['..Color.fromString(p.color):toHex(false)..']'..obj.getName())
@@ -479,7 +495,7 @@ function GW_GAME:PlayerBlindfoldChanged(states)
 
     local total = 0
     local picked = 0
-    for _, ply in ipairs(Player.getPlayers()) do
+    for _, ply in ipairs(self:GetPlayers()) do
         total = total + 1
         if self.data.prepared_players[ply.color] then
             picked = picked + 1
@@ -490,7 +506,7 @@ function GW_GAME:PlayerBlindfoldChanged(states)
     if self.data.picking_player and not states[self.data.picking_player] then
         -- player stopped being picking one
         local result = self.data.prepared_players[self.data.picking_player]
-        for _, ply in ipairs(Player.getPlayers()) do
+        for _, ply in ipairs(self:GetPlayers()) do
             if ply.color ~= self.data.picking_player then
                 ply.broadcast(self.data.picking_player.." Pick results: "..(result or 'NONE'), Color.fromString(self.data.picking_player))
             end
@@ -552,7 +568,7 @@ function GW_GAME:UpdPickDeck()
             self.data.prepared_players[self.data.picking_player] = result
 
             log(self.data.picking_player..': '..result)
-            for _, ply in ipairs(Player.getPlayers()) do
+            for _, ply in ipairs(self:GetPlayers()) do
                 if ply.color ~= self.data.picking_player then
                     ply.broadcast("Selected: "..(result or 'NONE'), Color.fromString(self.data.picking_player))
                 end
@@ -574,7 +590,7 @@ end
 function GW_GAME:UpdPicked()
     local total = 0
     local picked = 0
-    for _, ply in ipairs(Player.getPlayers()) do
+    for _, ply in ipairs(self:GetPlayers()) do
         total = total + 1
         if self.data.prepared_players[ply.color] then
             picked = picked + 1
@@ -1316,8 +1332,18 @@ function GW_GAME:InitPlyCardsOrdered(list)
     end
 end
 
-function GW_GAME:GetPlyInst(ply)
+function GW_GAME:GetPlayers()
+    local t = {}
     for _, player in ipairs(Player.getPlayers()) do
+        if PLAYER_MAPPING_K2ID[player.color] then
+            table.insert(t, player)
+        end
+    end
+    return t
+end
+
+function GW_GAME:GetPlyInst(ply)
+    for _, player in ipairs(self:GetPlayers()) do
         if player.color == ply then
             return player
         end
@@ -1689,7 +1715,7 @@ function onBlindfold()
     if     GW_GAME.data.game_started then return end
 
     local tbl = {}
-    for _, p in ipairs(Player.getPlayers()) do
+    for _, p in ipairs(GW_GAME:GetPlayers()) do
         tbl[p.color] = p.blindfolded
     end
     GW_GAME:PlayerBlindfoldChanged(tbl)
