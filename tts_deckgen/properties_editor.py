@@ -84,18 +84,20 @@ def _rename(old, new, directory):
            os.path.normpath(os.path.join(directory, '.'.join([new, old.split('.')[-1]])))
 
 
-def _normalize_name(name):
-    name = re.sub(r'_and_.*', '', name)
-    for x in KNOWN_SOURCES:
-        if name.endswith(x):
-            name = re.sub(fr'_{re.escape(x)}$', '', name)
-    join = ' '.join([f[0].upper() + f[1:] for f in (name.split('_'))])
-    return join
+def _normalize_name(raw_name):
+    split = raw_name.split('_and_')
+    for i, name in enumerate(split):
+        for x in KNOWN_SOURCES:
+            if name.endswith(x):
+                name = re.sub(fr'_{re.escape(x)}$', '', name)
+        join = ' '.join([f[0].upper() + f[1:] for f in (name.split('_'))])
+        split[i] = join
+    return split if len(split) > 1 else split[0]
 
 
-def _suggest(key, from_list):
+def _suggest(key, from_list, none='none'):
     print(f'{key}: ')
-    from_list = ['(none)'] + from_list
+    from_list = [f'({none})'] + from_list
     for i, v in enumerate(from_list):
         print(f'[{i}] {v}')
     while True:
@@ -108,7 +110,7 @@ def _suggest(key, from_list):
     return '' if ans == 0 else from_list[ans]
 
 
-class PropertiesEditor:
+class ExpansionLoader:
     def __init__(self, deck_path, images_path, expansion_path, prefix='grid', show=True, copy=False):
         self.expansion_paths = None
         self.expansion = None
@@ -145,7 +147,7 @@ class PropertiesEditor:
         s = name_no_ext
         i = 2
         while s in self.images_names:
-            s = f'{s} [{i}]'
+            s = f'{name_no_ext} [{i}]'
             i += 1
 
         self.images_names.append(s)
@@ -188,9 +190,14 @@ class PropertiesEditor:
 
     def handle_name(self, img):
         match = re.match(r'__([\w_-]+)_drawn_by_.*', img)
+        ans = ''
         if match:
             name = _normalize_name(match.group(1))
-            print(f'Suggestion: {name}')
+            if isinstance(name, str):
+                print(f'Suggestion: {name}')
+            else:
+                ans = _suggest('Suggestions', name, 'other')
+                
         elif self.previous_name:
             name = self.previous_name
             print(f'Suggestion: {name}')
@@ -198,7 +205,11 @@ class PropertiesEditor:
             name = None
             print('No suggestion')
 
-        s = input('> ')
+        if ans != '':
+            s = ans
+        else:
+            s = input('> ')
+    
         if s == '':
             if name:
                 old, new = _rename(img, name, self.expansion_path)
@@ -245,7 +256,7 @@ class PropertiesEditor:
         return self.idx < len(self.expansion)
 
 
-def properties_editor(deck_path, images_path, expansion_path, prefix='grid', show=True, copy=False):
-    editor = PropertiesEditor(deck_path, images_path, expansion_path, prefix, show, copy)
+def expansion_loader(deck_path, images_path, expansion_path, prefix='grid', show=True, copy=False):
+    editor = ExpansionLoader(deck_path, images_path, expansion_path, prefix, show, copy)
     while editor.has_next():
         editor.next()

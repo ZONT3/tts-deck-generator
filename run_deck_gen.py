@@ -34,10 +34,13 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None, bg_co
     for f in tqdm_inst(listdir, total=len(listdir), unit='pic', desc='Preparing pictures'):
         if ip.check_supported_ext(f):
             name = '.'.join(f.split('.')[0:-1])
-            name = re.sub(r'\s*\[\d+]$', '', name)
-            name = re.sub(r'^\[\d+]\s*', '', name)
-            name = re.sub(r'\s*\(\d+\)$', '', name)
-            name = re.sub(r'^\(\d+\)\s*', '', name)
+            name_len = 0
+            while len(name) != name_len:
+                name_len = len(name)
+                name = re.sub(r'\s*\[\d+]$', '', name)
+                name = re.sub(r'^\[\d+]\s*', '', name)
+                name = re.sub(r'\s*\(\d+\)$', '', name)
+                name = re.sub(r'^\(\d+\)\s*', '', name)
 
             info.append({'Nickname': name})
             f = os.path.join(pics_dir, f)
@@ -272,7 +275,7 @@ def main():
             raise AssertionError('Blank prefixes')
         prefix = prefixes[0]
 
-        pe.properties_editor(args.deck_dir, args.pics_dir, args.expansion, prefix, args.show_img, args.copy_expand)
+        pe.expansion_loader(args.deck_dir, args.pics_dir, args.expansion, prefix, args.show_img, args.copy_expand)
 
         if len(prefixes) > 1:
             src = d.cards_info_json(args.deck_dir, prefix)
