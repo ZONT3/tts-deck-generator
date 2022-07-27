@@ -196,6 +196,7 @@ Tabletop Simulator Gamemode.
   - [ ] Enabling/disabling "All-in"
   - [ ] Enabling/disabling warning of wrong rejection in the past minute (timer should be disabled)
   - [ ] In-game turns enable/disable
+  - [ ] Disable "Clone Wars"
 
 ---
 

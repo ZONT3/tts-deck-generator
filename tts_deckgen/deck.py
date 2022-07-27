@@ -1,7 +1,6 @@
 import json
 import math
 import os
-import re
 from typing import List, Union, Tuple, Optional
 
 from PIL import Image as Image
@@ -228,12 +227,10 @@ class Deck:
         for f, b, s in zip(faces, backs, self.sheets_sizes):
             self.saved_sheets.append(DeckSheet(f, b, s, not self.has_hide_img, self.back_sheets is not None))
 
-        with open(deck_info_json(output_dir, prefix), 'w') as o:
-            json.dump(self.saved_sheets, o, default=vars)
+        save_deck_info(self.saved_sheets, output_dir, prefix)
 
         if save_cards:
-            with open(cards_info_json(output_dir, prefix), 'w') as o:
-                json.dump(self.cards_info, o)
+            save_cards_info(self.cards_info, output_dir, prefix)
 
     @classmethod
     def create(cls, images: List[PILImage], info: Optional[List[dict]] = None, back_img=None, back_images=None,
@@ -328,6 +325,16 @@ def load_cards_info(directory, prefix):
     with open(cards_info_json(directory, prefix)) as fp:
         res = json.load(fp)
     return res
+
+
+def save_cards_info(cards, deck_dir, prefix):
+    with open(cards_info_json(deck_dir, prefix), 'w') as f:
+        json.dump(cards, f, indent=2)
+
+
+def save_deck_info(deck_info, deck_dir, prefix):
+    with open(deck_info_json(deck_dir, prefix), 'w') as o:
+        json.dump(deck_info, o, default=vars)
 
 
 sheets_cache = {}

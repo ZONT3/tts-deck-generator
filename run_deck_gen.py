@@ -13,6 +13,7 @@ import tts_deckgen.image_processing as ip
 import tts_deckgen.save_processing as sp
 import tts_deckgen.deck as d
 import tts_deckgen.properties_editor as pe
+import tts_deckgen.properties_editor_legacy as pel
 from tts_deckgen.save_processing import SaveProcessor
 
 
@@ -29,9 +30,9 @@ def generate_deck(pics_dir, output_dir, no_rejected=False, tqdm_inst=None, bg_co
     pics_face = []
     pics_back = None if no_rejected else []
 
-    listdir = sorted(os.listdir(pics_dir), key=lambda x: x.lower())
+    listdir = pe.norm_sort(os.listdir(pics_dir))
     for f in tqdm_inst(listdir, total=len(listdir), unit='pic', desc='Preparing pictures'):
-        if f.lower().split('.')[-1] in ['jpg', 'jpeg', 'png']:
+        if ip.check_supported_ext(f):
             name = '.'.join(f.split('.')[0:-1])
             name = re.sub(r'\s*\[\d+]$', '', name)
             name = re.sub(r'^\[\d+]\s*', '', name)
@@ -77,7 +78,7 @@ def insert_urls(game_save, output, show=True):
     buf = sav
 
     saved_replacement = os.path.join(output, '.url_replace.json')
-    files = [f for f in os.listdir(output) if f.lower().split('.')[-1] in ['png', 'jpg', 'jpeg']]
+    files = [f for f in os.listdir(output) if ip.check_supported_ext(f)]
     replacements = {}
 
     if os.path.isfile(saved_replacement):
@@ -141,17 +142,20 @@ def import_excel(args, cards, prefix):
             old, new = x
             print(f'\'{old}\' -> \'{new}\'')
         print(f'Some names have been changed ({len(ch)}). If this number is too big, wrong data '
-                    'might be in the imported file.\nContinue?', end=' ')
+              'might be in the imported file.\nContinue?', end=' ')
         if not yes_no_interact():
             return
-    with open(d.cards_info_json(args.deck_dir, prefix), 'w') as f:
-        json.dump(cards, f, indent=2)
+    d.save_cards_info(cards, args.deck_dir, prefix)
+
+
+def export_excel(xlsx, cards):
+    pe.export_excel(xlsx, cards)
 
 
 def merge_cards(deck_dir, prefix, into, from_fp):
     with open(from_fp) as fp:
         src = json.load(fp)
-    
+
     add = {}
     for c in src:
         if 'Nickname' not in c or 'Properties' not in c:
@@ -164,7 +168,7 @@ def merge_cards(deck_dir, prefix, into, from_fp):
 
         add[idx] = c['Properties']
 
-    pe.write_changes(d.cards_info_json(deck_dir, prefix), into, add, {})
+    pel.write_changes(d.cards_info_json(deck_dir, prefix), into, add, {})
 
 
 def parse_args():
@@ -175,29 +179,39 @@ def parse_args():
     p.add_argument('-u', '--insert-url', action='store_true',
                    help='Enter interactive mode for changing files local dirs to URLs. '
                         'Output dir will be used to iterate over files. --game-save must be set')
-    p.add_argument('-P', '--properties', action='store_true',
+    p.add_argument('-e', '--expansion', type=str, default=None, help='Expands deck and input dir with new images, '
+                                                                     'properly handling properties. Must be dir with '
+                                                                     'images and both valid -D and -d options used')
+    p.add_argument('--properties-legacy', action='store_true',
                    help='Enter properties editor mode. Allows you to interactively edit card\'s properties. '
                         'Saved deck must be set. Game save and guid are optional. (-D, -s, -g options respectively).')
     p.add_argument('--fix', action='store_true', help='Restores save (-s option) to untouched state')
 
-    p.add_argument('-m', '--merge', type=str, default=None, help='Merges specified card info JSON file into deck dir specified with -D option')
-    p.add_argument('-x', '--export-excel', type=str, default=None, help='Exports specified (-D) deck cards properties to excel. '
-                                                                       'Output excel file can be modified and imported using -X option')
-    p.add_argument('-X', '--import-excel', type=str, default=None, help='Imports specified excel file into deck (-D). See -x option for more info.')
+    p.add_argument('-m', '--merge', type=str, default=None,
+                   help='Merges specified card info JSON file into deck dir specified with -D option')
+    p.add_argument('-x', '--export-excel', type=str, default=None,
+                   help='Exports specified (-D) deck cards properties to excel. '
+                        'Output excel file can be modified and imported using -X option')
+    p.add_argument('-X', '--import-excel', type=str, default=None,
+                   help='Imports specified excel file into deck (-D). See -x option for more info.')
 
     p.add_argument('-o', '--output', type=str, default='output', help='Output dir')
     p.add_argument('-R', '--no-rejected', action='store_true', help='Do not generate "Rejected" as back')
 
     p.add_argument('-p', '--prefix', type=str, default='grid,clean',
-                   help='Deck prefix for -D and/or -P option. Will be prefix for info JSON files. Can be comma-separated list,'
+                   help='Deck prefix for -D and/or -P option. Will be prefix for info JSON files. '
+                        'Can be comma-separated list, '
                         'only has effect if list size is equal to guid (-g) list.')
 
     p.add_argument('-s', '--game-save', type=str, default=None, help='Modify save file. Must be also set --guid option')
-    p.add_argument('-g', '--guid', type=str, default=None, help='Target deck GUID in save. Can be comma-separated list.')
+    p.add_argument('-g', '--guid', type=str, default=None,
+                   help='Target deck GUID in save. Can be comma-separated list.')
     p.add_argument('-a', '--append', action='store_true', help='Append to deck in save instead of overwrite')
 
-    p.add_argument('-i', '--show-img', action='store_true', help='Show images for --insert-url interaction. '
+    p.add_argument('-i', '--show-img', action='store_true', help='Show images for --insert-url or --expand '
+                                                                 'interaction. '
                                                                  'Uses PIL.Image.Image.show()')
+    p.add_argument('-c', '--copy-expand', action='store_true', help='Copy image in --expand mode, instead of moving')
     p.add_argument('--bg-color', type=str, default='FFFFFF', help='Background color (HEX 6 digits only, like AABBCC) '
                                                                   'for replacing transparency.')
     p.add_argument('--keep-transparency', action='store_true', help='Keep transparency. Overrides --bg-color option.')
@@ -244,6 +258,28 @@ def main():
         os.remove(bak)
         return
 
+    if args.expansion:
+        if not os.path.isdir(args.deck_dir):
+            raise AssertionError('--deck-dir does not represent a dir')
+        if not os.path.isdir(args.expansion):
+            raise AssertionError('--expansion does not represent a dir')
+        if not os.path.isdir(args.pics_dir):
+            raise AssertionError('--pics-dir does not represent a dir')
+
+        prefixes = [p for p in args.prefix.split(',') if os.path.isfile(d.cards_info_json(args.deck_dir, p))]
+
+        if len(prefixes) == 0:
+            raise AssertionError('Blank prefixes')
+        prefix = prefixes[0]
+
+        pe.properties_editor(args.deck_dir, args.pics_dir, args.expansion, prefix, args.show_img, args.copy_expand)
+
+        if len(prefixes) > 1:
+            src = d.cards_info_json(args.deck_dir, prefix)
+            for p in prefixes[1:]:
+                shutil.copy(src, d.cards_info_json(args.deck_dir, p))
+        return
+
     if args.deck_dir:
         if not os.path.isdir(args.deck_dir):
             raise AssertionError('--deck-dir does not represent a dir')
@@ -260,21 +296,18 @@ def main():
             merge_cards(args.deck_dir, prefix_list[0], cards, args.merge)
 
         elif args.export_excel:
-            xlsx = args.export_excel
-            if not xlsx.endswith('.xlsx'):
-                xlsx = '.'.join([xlsx, 'xlsx'])
-            pe.export_excel(xlsx, cards)
+            export_excel(args.export_excel, cards)
             return
-        
+
         elif args.import_excel:
             import_excel(args, cards, prefix_list[0])
 
         elif args.properties:
             sheets = d.DeckSheet.load(args.deck_dir, prefix_list[0])
-            save, add, rm = pe.edit_properties(sheets, cards)
+            save, add, rm = pel.edit_properties(sheets, cards)
             if save:
                 for prefix in prefix_list:
-                    pe.write_changes(d.cards_info_json(args.deck_dir, prefix), cards, add, rm)
+                    pel.write_changes(d.cards_info_json(args.deck_dir, prefix), cards, add, rm)
                     break
 
         else:

@@ -8,6 +8,10 @@ from PIL import Image, ImageDraw
 from PIL.Image import Image as PILImage
 
 
+def check_supported_ext(f):
+    return f.lower().split('.')[-1] in ['png', 'jpg', 'jpeg']
+
+
 def download_img(img_url) -> PIL.Image.Image:
     r = requests.get(img_url)
     return Image.open(io.BytesIO(r.content))
