@@ -870,9 +870,12 @@ function GW_GAME:UiInitFilters()
 
             local filter_btns = {}
             local x_idx = 1
+            local set = {}
             for _, filter in ipairs(self.data.filter_order) do
                 local list = map[filter]
-                if list then
+                if list and not set[filter] then
+                    set[filter] = true
+                    
                     local display_name = nil
                     local test = cat.." - "
                     if not StartsWith(filter, test) then
